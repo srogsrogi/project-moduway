@@ -20,19 +20,16 @@ ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set")
 
-# 운영용은 mysql 사용
+# 운영용은 postgresql 사용
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
+        "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("PROD_DB_NAME"),
         "USER": os.environ.get("PROD_DB_USER"),
         "PASSWORD": os.environ.get("PROD_DB_PASSWORD"),
         "HOST": os.environ.get("PROD_DB_HOST", "localhost"),
-        "PORT": int(os.environ.get("PROD_DB_PORT", 3306)),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
-        "CONN_MAX_AGE": int(os.environ.get("PROD_DB_CONN_MAX_AGE", 0)),
+        "PORT": int(os.environ.get("PROD_DB_PORT", 5432)),
+        "CONN_MAX_AGE": int(os.environ.get("PROD_DB_CONN_MAX_AGE", 60)),
     }
 }
 
