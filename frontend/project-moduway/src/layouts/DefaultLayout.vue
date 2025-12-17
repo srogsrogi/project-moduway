@@ -1,1 +1,25 @@
-// 앱의 기본 레이아웃을 정의합니다. 공통 헤더와 푸터를 포함하며, 페이지 컴포넌트를 렌더링하는 <router-view>를 관리합니다.
+<template>
+  <div class="layout-wrapper">
+    <AppHeader />
+    <main>
+      <slot />
+    </main>
+    <AppFooter />
+  </div>
+</template>
+
+<script setup>
+import AppHeader from '@/components/common/AppHeader.vue';
+import AppFooter from '@/components/common/AppFooter.vue';
+</script>
+
+<style scoped>
+.layout-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+main {
+  flex: 1;
+}
+</style>

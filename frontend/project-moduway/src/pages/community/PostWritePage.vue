@@ -1,1 +1,305 @@
-// 게시글을 작성하거나 수정하는 페이지 컴포넌트입니다.
+<template>
+  <div class="write-main">
+    <div class="write-container">
+      <router-link to="/community" class="link-back">← 커뮤니티 목록으로</router-link>
+
+      <div class="write-box">
+        <h1>{{ isEditMode ? '게시글 수정' : '게시글 작성' }}</h1>
+
+        <form @submit.prevent="handleSubmit">
+          
+          <div class="form-group">
+            <label>게시판 선택</label>
+            <div class="category-select">
+              <select v-model="form.mainCategory" required @change="handleMainCategoryChange">
+                <option value="" disabled>-- 대분류 --</option>
+                <option v-for="cat in mainCategories" :key="cat.value" :value="cat.value">
+                  {{ cat.label }}
+                </option>
+              </select>
+              
+              <select v-model="form.subCategory" :disabled="form.mainCategory === 'notice'" required>
+                <option value="" disabled>-- 소분류 (유형) --</option>
+                <option value="talk">시시콜콜 (소통방)</option>
+                <option value="review">왁자지껄 (강의후기)</option>
+                <option value="qna">주고받고 (강의질문방)</option>
+              </select>
+              <span v-if="form.mainCategory === 'notice'" style="font-size: 13px; color: var(--primary-dark); align-self: center;">
+                * 공지/운영 선택 시 소분류는 무시됩니다.
+              </span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="postTitle">제목</label>
+            <input 
+              type="text" 
+              id="postTitle" 
+              class="form-control" 
+              placeholder="제목을 입력해주세요." 
+              v-model="form.title" 
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="postContent">내용</label>
+            <!-- WYSIWYG 에디터 대체용 textarea -->
+            <textarea 
+              id="postContent" 
+              class="form-control editor-placeholder" 
+              placeholder="내용을 입력해주세요." 
+              v-model="form.content"
+              required
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>첨부 파일</label>
+            <label for="fileUpload" class="file-upload-box">
+              클릭하거나 파일을 드래그하여 첨부 (최대 5개, 10MB 이하)
+              <input type="file" id="fileUpload" multiple @change="handleFileChange">
+              <div class="file-info">{{ fileListText }}</div>
+            </label>
+          </div>
+
+          <div class="action-buttons">
+            <button type="button" class="btn btn-outline" @click="$router.back()">취소</button>
+            <button type="submit" class="btn btn-primary">{{ isEditMode ? '수정하기' : '등록하기' }}</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+
+const route = useRoute();
+const router = useRouter();
+
+const isEditMode = computed(() => !!route.params.id);
+
+const form = ref({
+  mainCategory: '',
+  subCategory: '',
+  title: '',
+  content: '',
+  files: []
+});
+
+const mainCategories = [
+  { value: 'humanity', label: '인문' },
+  { value: 'social', label: '사회' },
+  { value: 'education', label: '교육' },
+  { value: 'engineering', label: '공학' },
+  { value: 'natural', label: '자연' },
+  { value: 'medical', label: '의약' },
+  { value: 'arts_pe', label: '예체능' },
+  { value: 'convergence', label: '융·복합' },
+  { value: 'notice', label: '공지/운영' },
+];
+
+const fileListText = computed(() => {
+  if (form.value.files.length > 0) {
+    return `첨부 파일: ${Array.from(form.value.files).map(f => f.name).join(', ')}`;
+  }
+  return '첨부된 파일 없음';
+});
+
+const handleMainCategoryChange = () => {
+  if (form.value.mainCategory === 'notice') {
+    form.value.subCategory = '';
+  }
+};
+
+const handleFileChange = (event) => {
+  form.value.files = event.target.files;
+};
+
+const handleSubmit = () => {
+  if (!form.value.mainCategory) {
+    alert('게시판 대분류를 선택해주세요.');
+    return;
+  }
+  if (!form.value.subCategory && form.value.mainCategory !== 'notice') {
+    alert('게시판 소분류를 선택해주세요.');
+    return;
+  }
+
+  let boardName = form.value.mainCategory;
+  if (form.value.mainCategory !== 'notice') {
+    boardName = `${form.value.mainCategory}_${form.value.subCategory}`;
+  }
+
+  // API Call Simulation
+  console.log('Form submitted:', { ...form.value, boardName });
+  alert(`${isEditMode.value ? '게시글 수정' : '게시글 등록'} 요청\n게시판: ${boardName}\n제목: ${form.value.title}`);
+  
+  router.push('/community');
+};
+
+onMounted(() => {
+  if (isEditMode.value) {
+    // Mock data fetching for edit mode
+    // In real app: fetchPost(route.params.id)
+    form.value = {
+      mainCategory: 'humanity',
+      subCategory: 'talk',
+      title: '수정할 게시글 제목 예시',
+      content: '기존 게시글 내용입니다.',
+      files: []
+    };
+  } else {
+    // For new post, check query parameters
+    const mainCatParam = route.query.mainCat;
+    const subCatParam = route.query.subCat;
+
+    if (mainCatParam) {
+      form.value.mainCategory = mainCatParam;
+      if (mainCatParam === 'notice') {
+        form.value.subCategory = ''; // Disable subcategory for notice
+      } else if (subCatParam) {
+        form.value.subCategory = subCatParam;
+      }
+    }
+  }
+});
+</script>
+
+<style scoped>
+/* 게시글 작성 스타일 */
+.write-main { 
+    padding: 40px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.write-container {
+    width: 100%;
+    max-width: 900px; 
+    padding: 0 20px;
+}
+
+.link-back { color: var(--text-sub); font-size: 14px; margin-bottom: 15px; display: block; }
+
+.write-box {
+    background-color: var(--bg-white);
+    padding: 30px 40px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    border: 1px solid var(--border); /* Added border for better visibility if shadow is subtle */
+}
+
+.write-box h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--primary-dark);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 15px;
+    margin-bottom: 30px;
+}
+
+/* 입력 폼 스타일 */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-main);
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit; /* textarea 폰트 상속 */
+}
+
+.form-control:focus {
+    border-color: var(--primary);
+}
+
+/* 카테고리 선택 */
+.category-select {
+    display: flex;
+    gap: 20px;
+}
+
+.category-select select {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 15px;
+    outline: none;
+}
+
+/* 내용 (에디터 영역) */
+.editor-placeholder {
+    min-height: 400px;
+    resize: vertical;
+}
+
+/* 첨부 파일 */
+.file-upload-box {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    margin-top: 10px;
+    display: block;
+}
+.file-upload-box:hover {
+    border-color: var(--primary);
+    background-color: var(--primary-light);
+}
+.file-upload-box input[type="file"] {
+    display: none;
+}
+.file-info {
+    font-size: 13px;
+    color: var(--text-sub);
+    margin-top: 5px;
+}
+
+/* 하단 버튼 */
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 30px;
+}
+.action-buttons .btn {
+    padding: 12px 30px;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+    .write-box {
+        padding: 20px;
+    }
+    .category-select {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .category-select select {
+        width: 100%;
+    }
+    .action-buttons {
+        justify-content: space-between;
+    }
+}
+</style>

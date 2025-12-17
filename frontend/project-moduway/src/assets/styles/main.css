@@ -1,0 +1,22 @@
+:root {
+    --primary: #f64959;       /* 메인 포인트 컬러 */
+    --primary-dark: #cc293d;  /* 호버 및 강조 컬러 */
+    --text-main: #111111;
+    --text-sub: #666666;
+    --bg-white: #ffffff;
+    --bg-light: #f9f9f9;
+    --border: #eeeeee;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Pretendard', 'Noto Sans KR', sans-serif; }
+body { background-color: var(--bg-white); color: var(--text-main); line-height: 1.6; }
+a { text-decoration: none; color: inherit; }
+ul { list-style: none; }
+
+/* 공통 컴포넌트 */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.btn { padding: 10px 24px; border-radius: 4px; font-weight: 600; cursor: pointer; transition: 0.3s; border: none; }
+.btn-primary { background-color: var(--primary); color: white; }
+.btn-primary:hover { background-color: var(--primary-dark); }
+.btn-outline { border: 1px solid var(--primary); color: var(--primary); background: transparent; }
+.btn-outline:hover { background-color: var(--primary); color: white; }
