@@ -46,6 +46,18 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
 
+    # cors
+    'corsheaders',
+
+    # auth
+    'rest_framework.authtoken',
+    'dj_rest_auth',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'dj_rest_auth.registration',
+
     # django default apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -57,18 +69,35 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = 'accounts.User'
 
+SITE_ID = 1
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Authentication 토큰 기반 인증 사용
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    # permission | 조회는 누구나, 변경은 인증된 사람만.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+]
+
+CORS_ALLOWED_ORIGINS = [
+    'http://127.0.0.1:5173',
+    'http://localhost:5173',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -137,3 +166,23 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+REST_AUTH = {
+    'USER_DETAILS_SERIALIZER': 'apps.accounts.serializers.CustomUserDetailsSerializer',
+    'REGISTER_SERIALIZER': 'apps.accounts.serializers.CustomRegisterSerializer',
+}
+
+# allauth 설정
+ACCOUNT_USER_MODEL_USERNAME_FIELD = 'username'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory' 
+
+AUTHENTICATION_BACKENDS = (
+    # Django Admin 로그인
+    "django.contrib.auth.backends.ModelBackend",
+    # 이메일 등 allauth 로그인
+    "allauth.account.auth_backends.AuthenticationBackend",
+)
