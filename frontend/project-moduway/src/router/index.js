@@ -3,6 +3,8 @@ import IndexPage from '@/pages/IndexPage.vue'
 import CourseListPage from '@/pages/CourseListPage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import CommunityBoardPage from '@/pages/community/CommunityBoardPage.vue'
+import PostWritePage from '@/pages/community/PostWritePage.vue'
+import PostDetailPage from '@/pages/community/PostDetailPage.vue'
 import GuidePage from '@/pages/GuidePage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import SignupPage from '@/pages/SignupPage.vue'
@@ -29,6 +31,21 @@ const router = createRouter({
       path: '/community',
       name: 'community',
       component: CommunityBoardPage,
+    },
+    {
+      path: '/community/write',
+      name: 'post-write',
+      component: PostWritePage,
+    },
+    {
+      path: '/community/write/:id',
+      name: 'post-edit',
+      component: PostWritePage,
+    },
+    {
+      path: '/community/posts/:id',
+      name: 'post-detail',
+      component: PostDetailPage,
     },
     {
       path: '/guide',

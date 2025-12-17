@@ -18,7 +18,7 @@
         </div>
         <div class="board-header">
           <h1>{{ currentBoardTitle }}</h1>
-          <router-link to="/community/write" class="write-btn">글쓰기</router-link>
+          <router-link :to="{ path: '/community/write', query: { mainCat: getMainCategory(currentBoardId), subCat: getSubCategory(currentBoardId) } }" class="write-btn">글쓰기</router-link>
         </div>
         
         <div class="board-desc">
@@ -87,6 +87,19 @@ const boardDescription = computed(() => {
   if (currentBoardId.value === 'notice') return 'LIFE-LEARN의 새로운 소식과 알림을 확인하세요.';
   return `${currentBoardTitle.value} 게시판입니다. 자유롭게 소통해보세요.`;
 });
+
+// Helper function to extract main category from boardId
+const getMainCategory = (boardId) => {
+  if (boardId === 'best_all') return ''; // 'best_all'은 특정 카테고리가 아님
+  if (boardId === 'notice') return 'notice';
+  return boardId.split('_')[0];
+};
+
+// Helper function to extract sub category from boardId
+const getSubCategory = (boardId) => {
+  if (boardId === 'best_all' || boardId === 'notice') return '';
+  return boardId.split('_')[1];
+};
 
 // Mock Data
 const posts = ref([
