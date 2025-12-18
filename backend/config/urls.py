@@ -18,7 +18,7 @@ Including another URLconf
 # backend/config/urls.py
 from django.contrib import admin
 from django.urls import path, include
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from django.conf import settings
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,9 +27,17 @@ urlpatterns = [
     # django-allauth가 내부적으로'만' 사용하는 URL들
     # (socialaccount_login, socialaccount_signup 등 포함)
     path('accounts/', include('allauth.urls')),
-    # API schema and documentation
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    # Optional UI:
-    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
+
+# API 문서화 도구용 엔드포인트
+# 보안을 위해 개발 환경에서만 노출
+if settings.DEBUG:
+    from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
+    urlpatterns += [
+        # API 스키마와 문서화.
+        path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+        # 둘 중 편한 것으로 선택해서 보기.
+        path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+        path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    ]        
