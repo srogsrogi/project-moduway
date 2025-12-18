@@ -10,17 +10,17 @@
         <form @submit.prevent="handleSignup">
           
           <div class="form-group">
-            <label for="username" class="form-label">아이디 <span class="required-mark">*</span></label>
+            <label for="email" class="form-label">이메일 <span class="required-mark">*</span></label>
             <div class="input-with-btn">
               <input 
-                type="text" 
-                id="username" 
+                type="email" 
+                id="email" 
                 class="form-input" 
-                placeholder="6자 이상 영문/숫자 조합" 
-                v-model="form.username" 
+                placeholder="example@email.com" 
+                v-model="form.email" 
                 required
               >
-              <button type="button" class="btn-outline">중복확인</button>
+              <button type="button" class="btn-outline">인증요청</button>
             </div>
           </div>
 
@@ -34,6 +34,9 @@
               v-model="form.password" 
               required
             >
+            <p class="helper-text" :class="passwordValidationClass" v-if="form.password">
+              {{ passwordValidationMsg }}
+            </p>
           </div>
 
           <div class="form-group">
@@ -46,7 +49,9 @@
               v-model="form.passwordConfirm" 
               required
             >
-            <p class="helper-text" :class="passwordMatchClass">{{ passwordMatchMsg }}</p>
+            <p class="helper-text" :class="passwordMatchClass" v-if="form.passwordConfirm">
+              {{ passwordMatchMsg }}
+            </p>
           </div>
 
           <div class="form-group">
@@ -59,21 +64,6 @@
               v-model="form.name" 
               required
             >
-          </div>
-
-          <div class="form-group">
-            <label for="email" class="form-label">이메일 <span class="required-mark">*</span></label>
-            <div class="input-with-btn">
-              <input 
-                type="email" 
-                id="email" 
-                class="form-input" 
-                placeholder="example@email.com" 
-                v-model="form.email" 
-                required
-              >
-              <button type="button" class="btn-outline">인증요청</button>
-            </div>
           </div>
 
           <div class="terms-box">
@@ -113,9 +103,12 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { register } from '@/api/auth';
+
+const router = useRouter();
 
 const form = ref({
-  username: '',
   password: '',
   passwordConfirm: '',
   name: '',
@@ -127,19 +120,38 @@ const form = ref({
   }
 });
 
+// 비밀번호 복잡성 검사 정규식: 8자 이상, 영문, 숫자, 특수문자 포함
+const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[!@#$%^*+=-])(?=.*[0-9]).{8,16}$/;
+
+const isPasswordValid = computed(() => {
+  return passwordRegex.test(form.value.password);
+});
+
+const passwordValidationMsg = computed(() => {
+  if (!form.value.password) return '';
+  return isPasswordValid.value 
+    ? '사용 가능한 비밀번호입니다.' 
+    : '8~16자 영문, 숫자, 특수문자를 포함해야 합니다.';
+});
+
+const passwordValidationClass = computed(() => {
+  return isPasswordValid.value ? 'text-success' : 'text-error';
+});
+
 // Password Matching Logic
+const isPasswordMatch = computed(() => {
+  return form.value.password === form.value.passwordConfirm;
+});
+
 const passwordMatchMsg = computed(() => {
   if (!form.value.passwordConfirm) return '';
-  return form.value.password === form.value.passwordConfirm 
+  return isPasswordMatch.value 
     ? '비밀번호가 일치합니다.' 
     : '비밀번호가 일치하지 않습니다.';
 });
 
 const passwordMatchClass = computed(() => {
-  if (!form.value.passwordConfirm) return '';
-  return form.value.password === form.value.passwordConfirm 
-    ? 'text-success' 
-    : 'text-error';
+  return isPasswordMatch.value ? 'text-success' : 'text-error';
 });
 
 // Terms Check Logic
@@ -157,14 +169,62 @@ watch(() => form.value.terms, (newTerms) => {
   allTermsChecked.value = newTerms.service && newTerms.privacy && newTerms.marketing;
 }, { deep: true });
 
-const handleSignup = () => {
+const handleSignup = async () => {
+  // 1. 필수 약관 동의 확인
   if (!form.value.terms.service || !form.value.terms.privacy) {
     alert('필수 약관에 동의해주세요.');
     return;
   }
-  // TODO: Implement actual signup API call
-  console.log('Signup form submitted:', form.value);
-  alert('회원가입 요청 (실제 API 연동 필요)');
+
+  // 2. 비밀번호 유효성 확인
+  if (!isPasswordValid.value) {
+    alert('비밀번호 형식이 올바르지 않습니다. (8~16자 영문, 숫자, 특수문자 포함)');
+    return;
+  }
+
+  // 3. 비밀번호 일치 확인
+  if (!isPasswordMatch.value) {
+    alert('비밀번호가 일치하지 않습니다.');
+    return;
+  }
+
+  try {
+    // 4. API 요청 Payload 구성
+    const payload = {
+      username: form.value.email, 
+      email: form.value.email,
+      password1: form.value.password,
+      password2: form.value.passwordConfirm,
+      name: form.value.name,
+      consent: {
+        terms_service: form.value.terms.service,
+        terms_privacy: form.value.terms.privacy,
+        marketing_opt_in: form.value.terms.marketing
+      }
+    };
+
+    // 5. 회원가입 API 호출
+    await register(payload);
+
+    alert('회원가입이 완료되었습니다.');
+    router.push('/login');
+
+  } catch (error) {
+    console.error('Signup Error:', error);
+    if (error.response && error.response.data) {
+      const data = error.response.data;
+      let msg = '회원가입에 실패했습니다.';
+      
+      if (data.username) msg = `아이디(이메일) 오류: ${data.username[0]}`;
+      else if (data.email) msg = `이메일 오류: ${data.email[0]}`;
+      else if (data.password1) msg = `비밀번호 오류: ${data.password1[0]}`;
+      else if (data.detail) msg = data.detail;
+
+      alert(msg);
+    } else {
+      alert('서버 오류가 발생했습니다.');
+    }
+  }
 };
 </script>
 

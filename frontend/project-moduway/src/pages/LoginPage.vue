@@ -9,13 +9,13 @@
 
         <form @submit.prevent="handleLogin">
           <div class="form-group">
-            <label for="username" class="form-label">아이디</label>
+            <label for="email" class="form-label">이메일</label>
             <input 
-              type="text" 
-              id="username" 
+              type="email" 
+              id="email" 
               class="form-input" 
               placeholder="example@email.com" 
-              v-model="username" 
+              v-model="email" 
               required
             >
           </div>
@@ -50,7 +50,7 @@
           <span>SNS 계정으로 간편 로그인</span>
         </div>
         <div class="social-buttons">
-          <button type="button" class="btn-social btn-google">
+          <button type="button" class="btn-social btn-google" @click="handleGoogleLogin">
             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" width="18" height="18">
             Google 계정으로 로그인
           </button>
@@ -67,8 +67,15 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { login as apiLogin, googleLogin as apiGoogleLogin } from '@/api/auth';
+import { useAuthStore } from '@/stores/auth';
+import { googleTokenLogin } from 'vue3-google-login';
 
-const username = ref('');
+const router = useRouter();
+const authStore = useAuthStore();
+
+const email = ref('');
 const password = ref('');
 const rememberMe = ref(false);
 const passwordFieldType = ref('password');
@@ -77,9 +84,63 @@ const togglePasswordVisibility = () => {
   passwordFieldType.value = passwordFieldType.value === 'password' ? 'text' : 'password';
 };
 
-const handleLogin = () => {
-  console.log('Login attempted');
-  alert('로그인 시도');
+const handleLogin = async () => {
+  if (!email.value || !password.value) {
+    alert('이메일과 비밀번호를 모두 입력해주세요.');
+    return;
+  }
+
+  try {
+    const payload = {
+      email: email.value, 
+      password: password.value,
+    };
+
+    const response = await apiLogin(payload);
+    
+    // 성공 응답: { key: "token_string" }
+    const token = response.data.key;
+    
+    if (token) {
+      // Store를 통해 로그인 상태 업데이트
+      authStore.login(token);
+      
+      alert('로그인 성공!');
+      router.push('/');
+    }
+  } catch (error) {
+    console.error('Login Error:', error);
+    if (error.response && error.response.data) {
+      const errorMsg = error.response.data.non_field_errors 
+        ? error.response.data.non_field_errors[0] 
+        : '로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.';
+      alert(errorMsg);
+    } else {
+      alert('서버 오류가 발생했습니다.');
+    }
+  }
+};
+
+const handleGoogleLogin = () => {
+  googleTokenLogin().then(async (response) => {
+    // response.access_token에 구글 액세스 토큰이 들어있음
+    console.log("Google Token:", response.access_token);
+    try {
+        const backendResponse = await apiGoogleLogin(response.access_token);
+        const token = backendResponse.data.key;
+        
+        if (token) {
+            authStore.login(token);
+            alert('구글 로그인 성공!');
+            router.push('/');
+        }
+    } catch (error) {
+        console.error("Google Login Backend Error:", error);
+        alert('구글 로그인 연동 중 오류가 발생했습니다.');
+    }
+  }).catch((error) => {
+    console.error("Google Popup Error:", error);
+  });
 };
 </script>
 
