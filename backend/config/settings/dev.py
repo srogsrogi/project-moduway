@@ -18,11 +18,13 @@ DATABASES = {
     }
 }
 
-# 개발용: 이메일을 실제 발송하지 않고 콘솔에 출력
+#TODO 개발용: 이메일을 실제 발송하지 않고 콘솔에 출력
 # - 회원가입 / 비밀번호 재설정 / 이메일 인증 플로우 테스트 목적
 # - SMTP 서버 설정 없이도 인증 메일 내용 및 링크 확인 가능
 # - 운영 환경에서는 SMTP 또는 외부 이메일 서비스로 교체 필요
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-# 개발용: 이메일 인증 강제 해제 (API 테스트 편의)
+#TODO 개발용: 이메일 인증 강제 해제 (API 테스트 편의)
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+
+ELASTICSEARCH_URL = "http://elasticsearch:9200"
