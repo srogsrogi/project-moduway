@@ -10,3 +10,4 @@ requests==2.32.5
 gunicorn
 PyJWT
 cryptography
+pgvector

@@ -1,4 +1,5 @@
 from django.db import models
+from pgvector.django import VectorField 
 
 class Course(models.Model):
     # K-MOOC 원본 데이터의 식별자 (CSV의 id 컬럼)
@@ -31,6 +32,11 @@ class Course(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # 1536차원 벡터 필드 (임베딩 저장용, openai text-embedding-3-small 모델 사용 예정)
+    embedding = VectorField(dimensions=1536, blank=True, null=True)
+
+
 
     def __str__(self):
         return self.name
@@ -38,3 +44,7 @@ class Course(models.Model):
     class Meta:
         db_table = 'courses'
         ordering = ['-created_at']
+        #TODO 3. 벡터 검색 최적화를 위한 인덱스 추가(데이터 적재 완료 후 테스트 및 활성화 검토)
+        # indexes = [
+        #     models.Index(fields=['embedding'], name='course_embedding_idx'),
+        # ]
