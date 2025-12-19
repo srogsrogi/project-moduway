@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: ankane/pgvector:latest # pgvector 확장자가 포함된 PostgreSQL 이미지
+    container_name: moduway-db
+    restart: always
+    environment:
+      - POSTGRES_DB=moduway
+      - POSTGRES_USER=moduway
+      - POSTGRES_PASSWORD=moduway
+      - TZ=Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - moduway-net
+
+  # Elasticsearch (검색 & 벡터 서치)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: moduway-es
+    environment:
+      - discovery.type=single-node # 싱글노드 설정
+      - xpack.security.enabled=false # 보안 비활성화. #TODO 운영 시 활성화 필요
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"  # 메모리 제한 (로컬용)
+      - TZ=Asia/Seoul
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - moduway-net
+    # 한글 형태소 분석기(nori) 설치를 위한 커맨드 설정
+    command: >
+      /bin/sh -c "./bin/elasticsearch-plugin list | grep -q analysis-nori 
+      || ./bin/elasticsearch-plugin install analysis-nori;
+      /usr/local/bin/docker-entrypoint.sh elasticsearch"
+
+  # Backend (Django)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: moduway-backend
+    restart: always
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - elasticsearch
+    environment:
+      - POSTGRES_DB=moduway
+      - POSTGRES_USER=moduway
+      - POSTGRES_PASSWORD=moduway
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - ES_URL=http://elasticsearch:9200
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+    networks:
+      - moduway-net
+
+  # Frontend (Vue.js + Nginx)
+  frontend:
+    build:
+      context: ./frontend/project-moduway
+      dockerfile: Dockerfile
+    container_name: moduway-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - moduway-net
+
+volumes:
+  postgres_data:
+  es_data:
+
+networks:
+  moduway-net:
+    driver: bridge

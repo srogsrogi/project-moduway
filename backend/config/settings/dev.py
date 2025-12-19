@@ -4,13 +4,17 @@ from .base import *
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'backend', 'moduway-backend']
 
-# DB : 개발용은 SQLite 사용
+# DB : PostgreSQL (Docker)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'moduway',
+        'USER': 'moduway',
+        'PASSWORD': 'moduway',
+        'HOST': 'db',  # 로컬에서 실행 시 Docker 포트 포워딩(5432) 사용
+        'PORT': '5432',
     }
 }
 

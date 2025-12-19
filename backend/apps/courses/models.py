@@ -5,9 +5,9 @@ class Course(models.Model):
     kmooc_id = models.CharField(max_length=50, unique=True)
     
     # 강좌 기본 정보
-    name = models.CharField(max_length=255)  # 강좌명
-    content_key = models.CharField(max_length=255, blank=True, null=True)
-    professor = models.CharField(max_length=255, blank=True, null=True)  # 교수자
+    name = models.CharField(max_length=500)  # 강좌명
+    content_key = models.CharField(max_length=500, blank=True, null=True)
+    professor = models.CharField(max_length=500, blank=True, null=True)  # 교수자
     org_name = models.CharField(max_length=100, blank=True, null=True)   # 운영기관(대학 등)
     
     # 분류
