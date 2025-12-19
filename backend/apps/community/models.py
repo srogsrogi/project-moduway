@@ -57,6 +57,7 @@ class Post(models.Model):
     # [설계의도] 좋아요 기능을 위한 사용자-게시글 M:N 관계
     likes = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
+        through='PostLike', # through 옵션을 사용하여 중개 모델(PostLike)을 지정, 이것이 있어야 좋아요 누른 시점을 기록 가능
         related_name='liked_posts',
         blank=True,
         help_text="좋아요한 사용자"
@@ -145,7 +146,7 @@ class Scrap(models.Model):
 
     [상세고려사항]
     - 좋아요와 달리, 향후 메모/폴더 등 확장을 고려해 별도 테이블로 분리
-    - unique_together로 중복 스크랩 방지
+    - unique Constraint로 중복 스크랩 방지
     """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
