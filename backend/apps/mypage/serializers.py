@@ -57,7 +57,7 @@ class DashboardStatsSerializer(serializers.Serializer):
     """
     # view에서 집계한 값을 필드로 정의
     # read_only : 입력으로는 받지 않고, 출력으로만 사용
-    taking_count = serializers.IntegerField(read_only=True) # 수강 중인 강좌 수
+    enrolled_count = serializers.IntegerField(read_only=True) # 수강 중인 강좌 수
     completed_count = serializers.IntegerField(read_only=True) # 완료한 강좌 수
     wishlist_count = serializers.IntegerField(read_only=True) # 찜한 강좌 수
     my_review_count = serializers.IntegerField(read_only=True) # 작성한 리뷰 수
@@ -127,7 +127,7 @@ class EnrollmentListSerializer(serializers.ModelSerializer):
         fields = (
             'id',               # 수강(Enrollment) 레코드 고유 ID
             'course',           # 중첩된 강좌 정보 (SimpleCourseSerializer 결과)
-            'status',           # 수강 상태 (예: TAKING / COMPLETED / DROPPED)
+            'status',           # 수강 상태 (예: ENROLLED / COMPLETED / DROPPED)
             'progress_rate',    # 학습 진도율 (0~100)
             'last_studied_at',  # 마지막 학습 시각
             'enrolled_at'       # 수강 등록 시각
