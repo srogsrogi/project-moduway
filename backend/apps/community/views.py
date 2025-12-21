@@ -15,8 +15,31 @@ from .serializers import (
 from .permissions import IsOwnerOrReadOnly
 
 
-# ==================== Board Views ====================
+# 개요
+"""
+1. Board
+- 1.1 BoardListView          | 게시판 목록
 
+2. Post
+- 2.1 PostListView           | 게시글 목록 + 생성
+- 2.2 PostDetailView         | 게시글 단건 조회/수정/삭제 (작성자만)
+- 2.3 PostSearchView         | 게시글 검색 + 게시판 필터링
+
+3. Comment
+- 3.1 CommentListView        | 댓글 목록 + 생성
+- 3.2 CommentDetailView      | 댓글 단건 조회/수정/삭제 (작성자만)
+
+4. Like / Scrap
+- 4.1 PostLikeView           | 게시글 좋아요 토글
+- 4.2 PostScrapView          | 게시글 스크랩 토글
+"""
+
+
+# =========================
+# 1) Board Views
+# =========================
+
+# 1.1 BoardListView | 게시판 목록
 class BoardListView(generics.ListAPIView):
     """
     [설계의도]
@@ -31,8 +54,11 @@ class BoardListView(generics.ListAPIView):
     permission_classes = []  # 누구나 조회 가능  ## "무조건 공개"의도라 AllowAny를 명시하는 방식도 고려중.
 
 
-# ==================== Post Views ====================
+# =========================
+# 2) Post Views
+# =========================
 
+# 2.1 PostListView | 게시글 목록 + 생성
 class PostListView(generics.ListCreateAPIView):
     # ↑ ListCreateAPIView: GET(목록) + POST(생성)을 한 엔드포인트에서 처리
     """
@@ -116,7 +142,7 @@ class PostListView(generics.ListCreateAPIView):
 
         serializer.save(author=self.request.user, board=board)
 
-
+# 2.2 PostDetailView | 게시글 단건 조회/수정/삭제
 class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
     # ↑ RetrieveUpdateDestroyAPIView: GET(단건 조회) + PUT/PATCH(수정) + DELETE(삭제)
     """
@@ -145,7 +171,7 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
         context['request'] = self.request
         return context
 
-
+# 2.3 PostSearchView | 게시글 검색 + 게시판 필터링
 class PostSearchView(generics.ListAPIView):
     # 검색은 "조회만" 하므로 ListAPIView
     """
@@ -192,8 +218,11 @@ class PostSearchView(generics.ListAPIView):
         return queryset.order_by('-created_at') # 최신순
 
 
-# ==================== Comment Views ====================
+# ====================
+# 3) Comment Views
+# ====================
 
+# 3.1 CommentListView | 댓글 목록 + 생성
 class CommentListView(generics.ListCreateAPIView):
     # ↑ 댓글도 목록 + 생성이 필요하니 ListCreateAPIView
     """
@@ -248,7 +277,7 @@ class CommentListView(generics.ListCreateAPIView):
         # ↑ 댓글 작성자/게시글/부모댓글을 서버가 확정해서 저장
         #   - 최상위 댓글이면 parent=None으로 저장됨
 
-
+# 3.2 CommentDetailView | 댓글 단건 조회/수정/삭제
 class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     [API]
@@ -269,8 +298,11 @@ class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_url_kwarg = 'comment_id'
 
 
-# ==================== Like & Scrap Views ====================
+# =========================
+# 4) Like / Scrap Views
+# =========================
 
+# 4.1 PostLikeView | 게시글 좋아요 토글
 class PostLikeView(APIView):
     # ↑ 좋아요는 "토글 액션"이라 제네릭보다 APIView가 직관적(메서드 하나로 처리)
     """
@@ -307,7 +339,7 @@ class PostLikeView(APIView):
             "likes_count": post.likes.count()
         }, status=status.HTTP_200_OK)
 
-
+# 4.2 PostScrapView | 게시글 스크랩 토글
 class PostScrapView(APIView):
     # ↑ 스크랩도 토글 액션 성격이라 APIView로 처리
     """
