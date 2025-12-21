@@ -197,15 +197,43 @@ class CourseReviewSerializer(serializers.ModelSerializer):
 
     [상세 고려 사항]
     - rating 범위 검증 (1~5) 필요 → validate_rating() 메서드 활용
+    - review_text 필수 + 100자 이상 강제 → 필드 옵션 + validate_review_text() 활용
     - user, course는 보안/무결성 이슈 방지를 위해
       클라이언트 입력이 아닌 View에서 강제로 주입
     """
+    # review_text를 "필수"로 강제하기 위한 필드 재정의
+    # - ModelSerializer는 기본적으로 Model의 필드 설정(blank 등)을 참고하지만,
+    #   API 스펙 수준에서 "반드시 입력"을 더 강하게 보장하고 싶다면
+    #   Serializer 필드를 명시적으로 재정의하는 것이 가장 확실하기에, 여기서 재정의함.
+    #   #NOTE: 추천 로직에서 리뷰 텍스트가 반드시 필요하기 때문임!
+    #
+    # required=True:
+    # - 요청 body에 review_text 키가 반드시 존재해야 함
+    #
+    # allow_blank=False:
+    # - review_text="" (빈 문자열) 허용하지 않음
+    #
+    # trim_whitespace=True:
+    # - "   ....   " 같은 입력은 앞뒤 공백을 제거한 후 검증(길이 검사)하게 됨
+    review_text = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+        error_messages={
+            # review_text 자체가 누락된 경우
+            "required": "리뷰를 작성해주세요.",
+            # review_text가 "" 이거나 공백만 있는 형태로 들어온 경우
+            "blank": "리뷰를 작성해주세요.",
+            "null": "리뷰를 작성해주세요.",
+        }
+    )
+
     class Meta:
         model = CourseReview
         fields = (
             'id',           # 수강평 고유 ID (식별자)
             'rating',       # 평점 (1~5)
-            'review_text',  # 후기 내용
+            'review_text',  # 후기 내용 (필수, 최소 100자)
             'created_at',   # 생성 시각
             'updated_at'    # 수정 시각
         )
@@ -233,6 +261,28 @@ class CourseReviewSerializer(serializers.ModelSerializer):
         # 정상 범위인 경우
         return value
     
+    # 후기 내용 길이를 검증하는 메서드
+    def validate_review_text(self, value):
+        """
+        review_text 검증 (필수 + 100자 이상)
+
+        DRF 동작 흐름:
+        1. serializer.is_valid() 호출
+        2. review_text 값이 존재하면
+        3. validate_review_text(value) 자동 호출
+        4. ValidationError 발생 시 is_valid() = False
+
+        [검증 포인트]
+        - 공백만 입력되는 경우를 막기 위해 strip() 후 길이를 검사
+        - 100자 미만이면 사용자에게 명확한 에러 메시지 반환
+        """
+        text = value.strip()
+
+        # 100자 이상 강제
+        if len(text) < 100:
+            raise serializers.ValidationError("리뷰는 100자 이상 작성해주세요.")
+
+        return text
 
 
 # 2.5 WishlistSerializer
