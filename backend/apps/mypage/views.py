@@ -10,10 +10,11 @@ from django.shortcuts import get_object_or_404
 
 from apps.courses.models import Course, Enrollment, Wishlist, CourseReview
 from apps.community.models import Post, Comment, Scrap
+from apps.accounts.models import UserConsent
 
-from .serializers import WishlistSerializer, CourseReviewSerializer, DashboardStatsSerializer, EnrollmentDetailSerializer, EnrollmentListSerializer
+from .serializers import WishlistSerializer, CourseReviewSerializer, DashboardStatsSerializer, EnrollmentDetailSerializer, EnrollmentListSerializer, CommunityStatsSerializer, MyPostSerializer, MyCommentSerializer, MyScrapSerializer, ProfileSerializer
 
-
+User = get_user_model()
 
 # 개요
 """
@@ -568,3 +569,335 @@ class WishlistToggleView(APIView):
                 {"detail": "위시리스트에 없는 강좌입니다."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+
+# =========================
+# 3. 커뮤니티
+#   - 1. CommunityStatsView       | 커뮤니티 활동 통계
+#   - 2. MyPostListView           | 내가 쓴 글 목록
+#   - 3. MyCommentListView        | 내가 쓴 댓글 목록
+#   - 4. MyScrapListView          | 내가 스크랩한 게시
+
+# ========================
+
+# 1. CommunityStatsView | 커뮤니티 활동 통계
+class CommunityStatsView(APIView):
+    """
+    [API]
+    - GET: /api/v1/mypage/community/stats/
+
+    [설계 의도]
+    - 마이페이지에서 커뮤니티 활동 통계를 제공하기 위함.
+    - 내가 쓴 글, 댓글, 스크랩 수와, 내 글이 받은 좋아요 수를 한 번에 집계
+
+    [상세 고려 사항]
+    - aggregate()로 단일 쿼리 최적화
+    - received_likes_count는 내 글이 받은 좋아요 수
+    - 집계 데이터는 DB모델 필드가 아니므로 Serializer에서 직접 정의
+    - IsAuthenticated를 명시적으로 재선언(방어적 설계))
+    """
+    # 인증된 사용자만 접근 가능
+    # - 전역 설정에도 IsAuthenticated가 있지만,
+    #   본 API가 개인 데이터(활동 통계) 영역임을 명확히 하기 위해 재선언(방어적 설계))
+    permission_classes = [IsAuthenticated]
+
+
+    def get(self, request):
+        user = request.user
+
+        # 내가 쓴 글/댓글/스크랩 수 집계
+        post_count = Post.objects.filter(author=user).count() # 내가 쓴 글 수
+        comment_count = Comment.objects.filter(author=user).count() # 내가 쓴 댓글 수
+        scrap_count = Scrap.objects.filter(user=user).count() # 내가 쓴 스크랩 수
+
+        # 내 글이 받은 좋아요 수 (aggregate 활용)
+        # Post.likes는 ManyToMany 관계이므로 Count 사용
+        # 주의:
+        # - Count('likes')는 "내가 쓴 게시글들의 좋아요 개수 합"을 의미
+        # - 댓글 좋아요는 여기서 포함하지 않음
+        post_likes_stats = Post.objects.filter(author=user).aggregate(
+            total_likes=Count('likes')
+        )
+
+        # 받은 좋아요 수가 None일 수 있으므로 0으로 대체
+        received_likes_count = post_likes_stats['total_likes'] or 0
+
+        # 응답 데이터 구성
+        data = {
+            'post_count': post_count,
+            'comment_count': comment_count,
+            'scrap_count': scrap_count,
+            'received_likes_count': received_likes_count
+        }
+
+        # 직렬화
+            # NOTE:
+            # - data를 인스턴스처럼 직접 전달하여 직렬화
+            # - CommunityStatsSerializer는 모델이 아닌 데이터 직렬화용!
+        serializer = CommunityStatsSerializer(data)
+        return Response(serializer.data)
+    
+# 2. MyPostListView | 내가 쓴 글 목록
+class MyPostListView(generics.ListAPIView):
+    """
+    [API]
+    - GET: /api/v1/mypage/community/posts/
+
+    [설계 의도]
+    - 마이페이지에서 내가 작성한 게시글 목록을 조회하기 위함
+    - 커뮤니티 활동 내역 확인 화면에 사용
+
+    [상세 고려 사항]
+    - ListAPIView 사용 이유:
+      - "목록 조회(GET)"만 필요하므로
+      - DRF가 기본 제공하는 기능 활용 (GET 처리/Serializer 적용/페이지네이션 등)
+      - 우리는 "어떤 데이터를 가져올지(get_queryset)"만 정의하면 됨
+    - select_related('author', 'board')로 N+1 방지
+    - annotate로 likes_count, comments_count 사전 집계
+    - 최신 작성순 정렬
+    """
+
+    # 이 뷰가 사용할 Serializer 지정
+    # - 게시글 기본 정보 + likes_count, comments_count 포함
+    serializer_class = MyPostSerializer
+
+    # 인증된 사용자만 접근 가능 # 방어적 설계
+    permission_classes = [IsAuthenticated]
+
+    # get_queryset 메서드 재정의
+        # ListAPIView는 GET 요청이 들어오면
+        # 가장 먼저 get_queryset()을 호출하여
+        # "이번 요청에서 조회할 데이터 범위"를 결정한다.
+    def get_queryset(self):
+        # 현재 로그인한 사용자
+        user = self.request.user
+
+
+        return Post.objects.filter(
+            author=user # 내가 쓴 글만 필터링
+        # annotate
+        # - 각 게시글(Post) 객체에 "계산된 컬럼"을 추가하는 역할
+        # - DB에서 미리 집계하여 성능 최적화
+        ).select_related('author', 'board').annotate(
+            likes_count=Count('likes'),
+            # comments_count는 부모 댓글만 집계하여 대댓글 제외
+            comments_count=Count('comments', filter=Q(comments__parent=None)) # 가장 최상위인 것만 !
+        ).order_by('-created_at') # 최신 순
+    
+# 3.3 MyCommentListView | 내가 쓴 댓글 목록
+class MyCommentListView(generics.ListAPIView):
+    """
+    [API]
+    - GET: /api/v1/mypage/community/comments/
+
+    [설계 의도]
+    - 마이페이지에서 "내가 쓴 댓글" 목록을 조회하기 위한 API
+    - 댓글만 보여주면 맥락이 부족하므로,
+      원문 게시글 정보(제목/게시판 등)를 함께 제공하여
+      사용자가 어디에 쓴 댓글인지 바로 알 수 있게 한다.
+
+    [상세 고려 사항]
+    - ListAPIView 사용
+    - select_related('author', 'post', 'post__board')로 미리 조인해놔서 N+1 방지
+    - 최신 작성순으로 정렬
+    """
+    # 이 뷰가 사용할 Serializer 지정)
+    serializer_class = MyCommentSerializer
+
+    # 인증된 사용자만 접근 가능 # 방어적 설계
+    permission_classes = [IsAuthenticated]
+
+    # get_queryset 메서드 재정의
+    def get_queryset(self):
+        # 현재 로그인한 사용자
+        user = self.request.user
+
+        return Comment.objects.filter(
+            author=user # 내가 쓴 댓글만 필터링
+        ).select_related('author', 'post', 'post__board').order_by('-created_at') # 미리 조인하고, 최신 순 정렬
+    
+
+# 3.4 MyScrapListView | 내가 스크랩한 게시글 목록
+class MyScrapListView(generics.ListAPIView):
+    """
+    [API]
+    - GET: /api/v1/mypage/scraps/
+
+    [설계 의도]
+    - 마이페이지에서 "내가 스크랩한 게시글" 목록을 조회하기 위한 API
+    - 스크랩 자체 정보만 주면 맥락이 부족하므로,
+      스크랩한 게시글(Post)의 핵심 정보까지 함께 제공한다.
+
+    [상세 고려 사항]
+    - ListAPIView 사용
+    - select_related('post', 'post__author', 'post__board')로 N+1 방지
+    - post의 likes/comments는 ManyToMany/역참조 관계이므로
+        prefetch_related로 미리 로드하여 N+1 방지
+    - 최신 스크랩순 정렬
+
+    # NOTE
+    selected_related:
+    - 정참조만 처리  (FK, OneToOne)
+    - 역참조, ManyToMany는 처리 불가
+    - SQL JOIN 으로 처리
+
+    prefetch_related:
+    - 역참조, ManyToMany 모두 처리 가능
+    - JOIN이 아닌 별도 쿼리로 관련 객체들을 한 번에 가져옴
+    - 메모리에서 Django가 알아서 매칭해 줌
+
+    # NOTE
+    JOIN
+    ```sql
+    SELECT *
+    FROM scrap
+    JOIN post ON scrap.post_id = post.id
+    WHERE scrap.user_id = ?
+    ```
+    MANY-TO-MANY
+    ```sql
+    SELECT *
+    FROM post_likes
+    WHERE post_id IN (1, 2, 3, 4 ...)
+    ```
+    REVERSE FOREIGN KEY
+    ```sql
+    SELECT *
+    FROM comment
+    WHERE post_id IN (1, 2, 3, 4 ...)
+    ```
+    """
+    # 이 뷰가 사용할 Serializer 지정
+    serializer_class = MyScrapSerializer
+    permission_classes = [IsAuthenticated]
+
+    # 내부 작동 로직
+    """
+    # 1. 스크랩 + 게시글 -> selected_related (JOIN)
+    SELECT *
+    FROM scrap
+    JOIN post ON scrap.post_id = post.id
+    WHERE scrap.user_id = ?
+
+    # 2. 스크랩된 게시글들의 좋아요를 한 번에 가져오기
+    SELECT *
+    FROM post_likes
+    WHERE post_id IN (1, 2, 3, 4 ...)
+
+    3. 스크랩된 게시글들의 댓글을 한 번에 가져오기
+    SELECT *
+    FROM comment
+    WHERE post_id IN (1, 2, 3, 4 ...)
+
+    4. Django가 메모리에서 post별로 likes, comments 매칭
+    post._prefetched_objects_cache = {
+    "likes": <QuerySet[...]>,
+    "comments": <QuerySet[...]>
+}
+        
+    """
+    def get_queryset(self):
+
+        user = self.request.user
+
+        return Scrap.objects.filter(
+            user=user
+        ).select_related(
+            'post', 'post__author', 'post__board'
+
+        ).prefetch_related(
+            'post__likes', 'post__comments'
+        ).order_by('-created_at') # 최신순
+    
+
+
+# =========================
+# 4. 내 계정
+# -1. ProfileView             | 내 정보 조회/수정 (마케팅 동의 포함)
+# =========================
+
+# 4.1 ProfileView | 내 정보 조회/수정
+# - RetrieveUpdateAPIView 사용 이유:
+# RetrieveUpdateAPIView는 "단일 객체 조회/수정"에 특화되게끔 DRF가 미리 만들어 둔 제네릭 View이다.
+# 즉, 우리가 매번 get()과 put() 메서드를 직접 작성하지 않아도 DRF가 알아서 처리해 준다.
+"""
+<예시>
+GET 요청
+ → get_object()
+ → serializer = get_serializer(instance)
+ → Response(serializer.data)
+PUT/PATCH 요청
+ → get_object()
+ → serializer = get_serializer(instance, data=request.data)
+ → serializer.is_valid()
+ → serializer.save()
+ → perform_update(serializer)
+ → Response(serializer.data)
+"""
+class ProfileView(generics.RetrieveUpdateAPIView):
+    """
+    [API]
+    - GET: /api/v1/mypage/profile/
+    - PUT: /api/v1/mypage/profile/
+
+    [설계 의도]
+    - 로그인한 사용자의 프로필 정보를 조회하고 수정하기 위한 API
+    - 내 정보만 다루니까, 별도의 user_id 없이도 가능
+
+    [상세 고려 사항]
+    - 현재 로그인한 사용자 정보만 조회/수정
+    - marketing_opt_in은 UserConsent에서 가져와야 함 → SerializerMethodField 활용
+    - email 수정 시 중복 검증은 Serializer에서 처리 (검증은 serializer, 저장은 view로 역할 분담!!!)
+    - 전역 permission이 있어도, 인증된 사용자만 접근 가능하도록 재선언(방어적 설계)
+    """
+    # 이 뷰에서 사용할 serializer 지정
+    serializer_class = ProfileSerializer
+    
+    # 인증된 사용자만 접근 가능 # 방어적 설계
+    permission_classes = [IsAuthenticated]
+
+    # 조회/수정 대상 객체를 지정.
+    def get_object(self):
+        """
+        [설계 의도]
+        - 조회/수정 대상은 항상 "현재 로그인한 사용자"
+
+        [설명]
+        - RetrieveUpdateAPIView는 내부적으로
+          get_object()를 호출해 대상 객체를 가져온다.
+        - 일반적인 경우 pk를 URL에서 받아 조회하지만,
+          이 API는 "내 프로필" 전용이므로
+          request.user를 그대로 반환한다.
+        """
+        return self.request.user
+
+    # 프로필 수정 후 추가 처리를 위함.
+    def perform_update(self, serializer):
+        """
+        [설계 의도]
+        - User 모델 수정 이후,
+          UserConsent(marketing_opt_in)도 함께 갱신
+
+        [상세 고려 사항]
+        - serializer.save()는 User 모델의 필드만 저장
+          (email, name 등)
+        - marketing_opt_in은 User 모델 필드가 아니므로
+          request.data에서 직접 추출해 별도로 저장
+        """
+        # 1) User 모델 필드 저장
+        # 이메일, name 등 profileserializer에 정의된 필드 저장은 여기서
+        user = serializer.save()
+
+        # 2) marketing_opt_in 업데이트
+        # request.data에서 marketing_opt_in 값 추출
+        # - 값이 전달된 경우에만 UserConsent 업데이트
+        marketing_opt_in = self.request.data.get('marketing_opt_in', None)
+
+        if marketing_opt_in is not None:
+            # UserConsent : User - OneToOne 관계
+            UserConsent.objects.update_or_create(
+                user=user,
+                defaults={'marketing_opt_in': marketing_opt_in}
+            )
+
+
