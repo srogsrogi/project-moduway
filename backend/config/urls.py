@@ -26,6 +26,7 @@ urlpatterns = [
     # REST API용 accounts 엔드포인트
     path('api/v1/accounts/', include('apps.accounts.urls')),
     path('api/v1/community/', include('apps.community.urls')),
+    path('api/v1/courses/', include('apps.courses.urls')),
     # path('api/v1/mypage/', include('apps.mypage.urls')),
     
     # django-allauth가 내부적으로'만' 사용하는 URL들

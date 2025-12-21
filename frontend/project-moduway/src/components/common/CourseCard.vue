@@ -1,19 +1,21 @@
 <template>
-  <div class="course-card">
-    <div class="card-thumb">
-      <span class="badge" :style="{ backgroundColor: badgeColor }">{{ status }}</span>
-      <img v-if="thumbnail" :src="thumbnail" :alt="title" />
-      <div v-else class="placeholder-thumb">THUMBNAIL</div>
-    </div>
-    <div class="card-body">
-      <span class="uni-name">{{ university }}</span>
-      <h3 class="course-title">{{ title }}</h3>
-      <div class="course-info">
-        <span>{{ instructor }}</span>
-        <span>{{ period }}</span>
+  <RouterLink :to="`/courses/${id}`" class="course-card-link">
+    <div class="course-card">
+      <div class="card-thumb">
+        <span class="badge" :style="{ backgroundColor: badgeColor }">{{ status }}</span>
+        <img v-if="thumbnail" :src="thumbnail" :alt="title" />
+        <div v-else class="placeholder-thumb">THUMBNAIL</div>
+      </div>
+      <div class="card-body">
+        <span class="uni-name">{{ university }}</span>
+        <h3 class="course-title">{{ title }}</h3>
+        <div class="course-info">
+          <span>{{ instructor }}</span>
+          <span>{{ period }}</span>
+        </div>
       </div>
     </div>
-  </div>
+  </RouterLink>
 </template>
 
 <script setup>
@@ -30,6 +32,7 @@ defineProps({
 </script>
 
 <style scoped>
+.course-card-link { text-decoration: none; color: inherit; display: block; }
 .course-card { background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: 0.3s; position: relative; cursor: pointer; }
 .course-card:hover { box-shadow: 0 10px 20px rgba(0,0,0,0.08); transform: translateY(-5px); border-color: #ffdce0; }
 

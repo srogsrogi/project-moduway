@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import IndexPage from '@/pages/IndexPage.vue'
 import CourseListPage from '@/pages/CourseListPage.vue'
+import CourseDetailPage from '@/pages/CourseDetailPage.vue'
 import MyPage from '@/pages/MyPage.vue'
 import CommunityBoardPage from '@/pages/community/CommunityBoardPage.vue'
 import PostWritePage from '@/pages/community/PostWritePage.vue'
@@ -22,6 +23,11 @@ const router = createRouter({
       path: '/courses',
       name: 'courses',
       component: CourseListPage,
+    },
+    {
+      path: '/courses/:id',
+      name: 'course-detail',
+      component: CourseDetailPage,
     },
     {
       path: '/mypage',
