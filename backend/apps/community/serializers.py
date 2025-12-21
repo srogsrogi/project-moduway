@@ -7,6 +7,28 @@ from drf_spectacular.utils import extend_schema, extend_schema_field, OpenApiTyp
 # - 커스텀 유저 모델을 사용하는 상황에서도 호환되게끔
 User = get_user_model()
 
+# 개요
+"""
+0. 공통
+- 0.1. UserSerializer         | 작성자 표시용으로 최소한의 정보.
+
+1. Board
+- 1.1. BoardSerializer        | 게시판 목록
+
+2. Post
+- 2.1. PostListSerializer     | 게시글 목록용
+- 2.2. PostSerializer         | 게시글 상세용
+
+3. Comment
+- 3.1. CommentSerializer      | 댓글 + 대댓글 재귀 표현
+
+4. Scrap
+- 4.1. ScrapSerializer        | 스크랩 목록용
+
+"""
+
+
+# 0.1 UserSerializer | 작성자 표시용 최소 정보
 class UserSerializer(serializers.ModelSerializer):
     """
     [설계의도]
@@ -21,6 +43,7 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'username', 'email')
 
 
+# 1.1 BoardSerializer | 게시판 목록
 class BoardSerializer(serializers.ModelSerializer):
     """
     [설계 의도]
@@ -44,40 +67,7 @@ class BoardSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'posts_count')
 
 
-class CommentSerializer(serializers.ModelSerializer):
-    """
-    [설계의도]
-    - 댓글 + 대댓글을 재귀적으로 표현하기 위한 시리얼라이저
-
-    [상세고려사항]
-    - replies는 SerializerMethodField로 동적 계산
-    """
-    author = UserSerializer(read_only=True)
-    # ↑ Comment.author를 그대로 id로만 주지 않고, UserSerializer로 "중첩(nested)" 출력
-    #   - read_only라서 댓글 생성 시 author를 body로 받지 않음(서버에서 넣어야 함)
-    replies = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Comment
-        fields = ('id', 'author', 'post', 'parent', 'content', 'created_at', 'updated_at', 'replies')
-        read_only_fields = ('id', 'author', 'post', 'created_at', 'updated_at')
-
-    def get_replies(self, obj):
-        """
-        [설계의도]
-        - 대댓글을 재귀 구조로 포함
-
-        [상세고려사항]
-        # TODO
-        - 이 구조는 "깊이"가 깊거나 댓글이 많으면 호출이 많이 발생할 수 있음
-        - prefetch_related('replies__author') 같은 최적화 고도화 필요.
-        - views.py에서 어느 정도는 하고 있음.
-        """
-        if obj.replies.exists():
-            return CommentSerializer(obj.replies.all(), many=True).data
-        return []
-
-
+# 2.1 PostListSerializer | 게시글 목록용
 class PostListSerializer(serializers.ModelSerializer):
     # ↑ 목록용 serializer는 일반적으로 "필드 최소화 + 빠른 응답"이 목적
     """
@@ -115,6 +105,7 @@ class PostListSerializer(serializers.ModelSerializer):
         """
         return obj.comments.filter(parent=None).count()
 
+# 2.2 PostSerializer | 게시글 상세용
 class PostSerializer(serializers.ModelSerializer):
     """
     [설계의도]
@@ -223,6 +214,42 @@ class PostSerializer(serializers.ModelSerializer):
         return False
 
 
+# 3.1 CommentSerializer | 댓글 + 대댓글 재귀 표현
+class CommentSerializer(serializers.ModelSerializer):
+    """
+    [설계의도]
+    - 댓글 + 대댓글을 재귀적으로 표현하기 위한 시리얼라이저
+
+    [상세고려사항]
+    - replies는 SerializerMethodField로 동적 계산
+    """
+    author = UserSerializer(read_only=True)
+    # ↑ Comment.author를 그대로 id로만 주지 않고, UserSerializer로 "중첩(nested)" 출력
+    #   - read_only라서 댓글 생성 시 author를 body로 받지 않음(서버에서 넣어야 함)
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ('id', 'author', 'post', 'parent', 'content', 'created_at', 'updated_at', 'replies')
+        read_only_fields = ('id', 'author', 'post', 'created_at', 'updated_at')
+
+    def get_replies(self, obj):
+        """
+        [설계의도]
+        - 대댓글을 재귀 구조로 포함
+
+        [상세고려사항]
+        # TODO
+        - 이 구조는 "깊이"가 깊거나 댓글이 많으면 호출이 많이 발생할 수 있음
+        - prefetch_related('replies__author') 같은 최적화 고도화 필요.
+        - views.py에서 어느 정도는 하고 있음.
+        """
+        if obj.replies.exists():
+            return CommentSerializer(obj.replies.all(), many=True).data
+        return []
+
+
+# 4.1 ScrapSerializer | 스크랩 목록용
 class ScrapSerializer(serializers.ModelSerializer):
     """
     [설계의도]
