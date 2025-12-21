@@ -9,10 +9,10 @@ class Command(BaseCommand):
     help = 'Import KMOOC courses from CSV file'
 
     def handle(self, *args, **kwargs):
-        # CSV 파일 경로 (프로젝트 루트 기준 data/processing/kmooc_processed_data.csv)
+        # CSV 파일 경로 (프로젝트 루트 기준 data/backups/kmooc_processed_data.csv)
         base_dir = settings.BASE_DIR  # backend/
         project_root = base_dir.parent # project-moduway/
-        csv_path = os.path.join(project_root, 'data', 'processing', 'kmooc_processed_data.csv')
+        csv_path = os.path.join(project_root, 'data', 'backups', 'kmooc_processed_data.csv')
 
         if not os.path.exists(csv_path):
             self.stdout.write(self.style.ERROR(f'CSV file not found at: {csv_path}'))
