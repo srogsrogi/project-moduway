@@ -47,13 +47,13 @@ class CourseRecommendationView(APIView):
             return Response([])
 
         try:
-            # 중복 필터링을 위해 넉넉히 20개 가져옴, 출력은 4개
+            # 중복 필터링을 위해 넉넉히 30개 가져옴, 출력은 4개
             res = ES_CLIENT.search(
                 index="kmooc_courses",
                 knn={
                     "field": "embedding",
                     "query_vector": list(query_vector),
-                    "k": 20,
+                    "k": 30,
                     "num_candidates": 200
                 },
                 source=["id"]
