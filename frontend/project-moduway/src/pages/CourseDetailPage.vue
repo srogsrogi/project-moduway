@@ -95,11 +95,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
+import api from '@/api/index';
+import { addWishlist, removeWishlist } from '@/api/mypage';
 import CourseCard from '@/components/common/CourseCard.vue';
 
 const route = useRoute();
+const router = useRouter();
 const activeTab = ref('intro');
 const course = ref(null);
 const reviews = ref([]);
@@ -113,16 +116,16 @@ const formattedSummary = computed(() => {
 const fetchData = async () => {
   const courseId = route.params.id;
   try {
-    // 1. 강좌 상세
-    const detailRes = await axios.get(`/api/v1/courses/${courseId}/`);
+    // 1. 강좌 상세 (인증된 경우 is_wished 포함을 위해 api 인스턴스 사용)
+    const detailRes = await api.get(`/courses/${courseId}/`);
     course.value = detailRes.data;
 
     // 2. 전체 수강평
-    const reviewRes = await axios.get(`/api/v1/courses/${courseId}/reviews/`);
+    const reviewRes = await api.get(`/courses/${courseId}/reviews/`);
     reviews.value = reviewRes.data;
 
     // 3. AI 추천 강좌
-    const recommendRes = await axios.get(`/api/v1/courses/${courseId}/recommendations/`);
+    const recommendRes = await api.get(`/courses/${courseId}/recommendations/`);
     recommendedCourses.value = recommendRes.data;
   } catch (error) {
     console.error("데이터 로드 실패:", error);
@@ -131,17 +134,25 @@ const fetchData = async () => {
 
 // 찜하기 토글
 const handleWishlistToggle = async () => {
+  if (!course.value) return;
+  
   const courseId = course.value.id;
   try {
     if (course.value.is_wished) {
-      await axios.delete(`/api/v1/mypage/wishlist/${courseId}/`);
+      await removeWishlist(courseId);
       course.value.is_wished = false;
     } else {
-      await axios.post(`/api/v1/mypage/wishlist/${courseId}/`);
+      await addWishlist(courseId);
       course.value.is_wished = true;
     }
   } catch (error) {
-    if (error.response?.status === 401) alert('로그인이 필요합니다.');
+    if (error.response?.status === 401) {
+      if (confirm('로그인이 필요한 기능입니다. 로그인 페이지로 이동할까요?')) {
+        router.push({ name: 'Login', query: { redirect: route.fullPath } });
+      }
+    } else {
+      alert('요청 처리 중 오류가 발생했습니다.');
+    }
   }
 };
 

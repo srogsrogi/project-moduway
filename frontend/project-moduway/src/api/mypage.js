@@ -20,6 +20,16 @@ export const getWishlist = () => {
   return api.get('/mypage/wishlist/');
 };
 
+// 찜 추가
+export const addWishlist = (courseId) => {
+  return api.post(`/mypage/wishlist/${courseId}/`);
+};
+
+// 찜 삭제
+export const removeWishlist = (courseId) => {
+  return api.delete(`/mypage/wishlist/${courseId}/`);
+};
+
 // 커뮤니티 활동 통계 조회
 export const getCommunityStats = () => {
   return api.get('/mypage/community/stats/');
