@@ -9,8 +9,9 @@ class CourseAIReview(models.Model):
     """
     LLM이 생성한 강좌 평가 데이터
 
-    - 0.0 ~ 5.0 점수 체계 (FloatField 사용)
-    - 0: 매우 낮음/쉬움/짧음
+    - Rating 점수: 1 ~ 5 정수 (IntegerField)
+    - Average 점수: 1.0 ~ 5.0 실수 (FloatField, 둘째 자리 반올림)
+    - 1: 매우 낮음/쉬움/짧음
     - 5: 매우 높음/어려움/김
     """
 
@@ -28,30 +29,31 @@ class CourseAIReview(models.Model):
         help_text="LLM이 생성한 강좌 요약 (2-3문장 제한)"
     )
 
-    # 평가 점수 (0.0 - 5.0) - 소수점 1자리(0.1f) 반영을 위해 FloatField 사용
+    # 평가 점수 - 4개 항목 평균 (1.0 - 5.0, 둘째 자리 반올림)
     average_rating = models.FloatField(
-        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)],
-        help_text="종합 평점 (0.0-5.0)"
+        validators=[MinValueValidator(1.0), MaxValueValidator(5.0)],
+        help_text="종합 평점 (1.0-5.0)"
     )
 
-    theory_rating = models.FloatField(
-        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)],
-        help_text="이론적 깊이 (0: 얕음, 5: 깊음)"
+    # 개별 평가 점수 (1 - 5 정수)
+    theory_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="이론적 깊이 (1: 매우 기초적, 5: 고급)"
     )
 
-    practical_rating = models.FloatField(
-        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)],
-        help_text="실무적 활용도 (0: 낮음, 5: 높음)"
+    practical_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="실무적 활용도 (1: 이론 중심, 5: 프로젝트 중심)"
     )
 
-    difficulty_rating = models.FloatField(
-        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)],
-        help_text="학습 난이도 (0: 쉬움, 5: 어려움)"
+    difficulty_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="학습 난이도 (1: 입문자용, 5: 고급)"
     )
 
-    duration_rating = models.FloatField(
-        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)],
-        help_text="학습 기간 (0: 짧음, 5: 김)"
+    duration_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="학습 기간 (1: 1-4주, 5: 17주 이상)"
     )
 
     # 메타데이터 및 추적
