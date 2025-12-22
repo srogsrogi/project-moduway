@@ -4,6 +4,17 @@
 # macOS
 .DS_Store
 
+# ML models
+*.joblib
+*.pkl
+*.h5
+*.pt
+*.onnx
+
+# 학습 결과물
+models/
+checkpoints/
+
 ### Linux ###
 *~
 

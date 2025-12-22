@@ -6,10 +6,10 @@ import MyPage from '@/pages/MyPage.vue'
 import CommunityBoardPage from '@/pages/community/CommunityBoardPage.vue'
 import PostWritePage from '@/pages/community/PostWritePage.vue'
 import PostDetailPage from '@/pages/community/PostDetailPage.vue'
-import GuidePage from '@/pages/GuidePage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import SignupPage from '@/pages/SignupPage.vue'
 import PreferenceSettingPage from '@/pages/PreferenceSettingPage.vue'
+import ComparisonPage from '@/pages/ComparisonPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +18,11 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: IndexPage,
+    },
+    {
+      path: '/comparisons',
+      name: 'comparisons',
+      component: ComparisonPage,
     },
     {
       path: '/courses',
@@ -53,11 +58,6 @@ const router = createRouter({
       path: '/community/posts/:id',
       name: 'post-detail',
       component: PostDetailPage,
-    },
-    {
-      path: '/guide',
-      name: 'guide',
-      component: GuidePage,
     },
     {
       path: '/login',

@@ -5,12 +5,14 @@
       <slot />
     </main>
     <AppFooter />
+    <ComparisonBar />
   </div>
 </template>
 
 <script setup>
 import AppHeader from '@/components/common/AppHeader.vue';
 import AppFooter from '@/components/common/AppFooter.vue';
+import ComparisonBar from '@/components/comparison/ComparisonBar.vue';
 </script>
 
 <style scoped>

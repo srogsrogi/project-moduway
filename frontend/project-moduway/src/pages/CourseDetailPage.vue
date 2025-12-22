@@ -43,17 +43,7 @@
         </section>
 
         <section v-if="activeTab === 'reviews'" id="reviews" class="detail-section">
-          <h2>수강평 ({{ course.review_count || 0 }})</h2>
-          <div class="review-list" v-if="reviews.length > 0">
-            <div v-for="review in reviews" :key="review.id" class="review-item">
-              <div class="review-meta">
-                <span class="review-user">{{ review.user_name }}</span>
-                <span class="review-rating">★ {{ review.rating }}</span>
-              </div>
-              <p class="review-text">{{ review.review_text }}</p>
-            </div>
-          </div>
-          <p v-else class="no-data">아직 작성된 수강평이 없습니다.</p>
+          <CourseReviewSection :course-id="route.params.id" />
         </section>
       </main>
 
@@ -72,7 +62,7 @@
             <li><span>총 학습 시간</span> <strong>{{ Math.round(course.course_playtime / 3600) }}시간</strong></li>
             <li><span>이수증</span> <strong>{{ course.certificate_yn === 'Y' ? '발급 가능' : '해당 없음' }}</strong></li>
           </ul>
-          <a :href="course.url" target="_blank" class="btn-external">K-MOOC 원문 보기 ↗</a>
+          <a :href="course.url" target="_blank" class="btn-external">K-MOOC 바로가기 ↗</a>
         </div>
       </aside>
     </div>
@@ -94,15 +84,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import axios from 'axios';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import api from '@/api/index';
+import { getCourseDetail, getRecommendedCourses } from '@/api/courses';
+import { addWishlist, removeWishlist } from '@/api/mypage';
 import CourseCard from '@/components/common/CourseCard.vue';
+import CourseReviewSection from '@/components/course/CourseReviewSection.vue';
 
 const route = useRoute();
+const router = useRouter();
 const activeTab = ref('intro');
 const course = ref(null);
-const reviews = ref([]);
 const recommendedCourses = ref([]);
 
 const formattedSummary = computed(() => {
@@ -110,38 +103,54 @@ const formattedSummary = computed(() => {
 });
 
 // 데이터 로드 통합 함수
-const fetchData = async () => {
-  const courseId = route.params.id;
+const fetchData = async (courseId) => {
+  if (!courseId) return;
   try {
     // 1. 강좌 상세
-    const detailRes = await axios.get(`/api/v1/courses/${courseId}/`);
+    const detailRes = await getCourseDetail(courseId);
     course.value = detailRes.data;
 
-    // 2. 전체 수강평
-    const reviewRes = await axios.get(`/api/v1/courses/${courseId}/reviews/`);
-    reviews.value = reviewRes.data;
-
-    // 3. AI 추천 강좌
-    const recommendRes = await axios.get(`/api/v1/courses/${courseId}/recommendations/`);
+    // 2. AI 추천 강좌
+    const recommendRes = await getRecommendedCourses(courseId);
     recommendedCourses.value = recommendRes.data;
+    
+    // 탭 초기화 및 스크롤 상단 이동
+    activeTab.value = 'intro';
+    window.scrollTo(0, 0);
   } catch (error) {
     console.error("데이터 로드 실패:", error);
   }
 };
 
+// 라우트 파라미터 변경 감지
+watch(
+  () => route.params.id,
+  (newId) => {
+    fetchData(newId);
+  }
+);
+
 // 찜하기 토글
 const handleWishlistToggle = async () => {
+  if (!course.value) return;
+  
   const courseId = course.value.id;
   try {
     if (course.value.is_wished) {
-      await axios.delete(`/api/v1/mypage/wishlist/${courseId}/`);
+      await removeWishlist(courseId);
       course.value.is_wished = false;
     } else {
-      await axios.post(`/api/v1/mypage/wishlist/${courseId}/`);
+      await addWishlist(courseId);
       course.value.is_wished = true;
     }
   } catch (error) {
-    if (error.response?.status === 401) alert('로그인이 필요합니다.');
+    if (error.response?.status === 401) {
+      if (confirm('로그인이 필요한 기능입니다. 로그인 페이지로 이동할까요?')) {
+        router.push({ name: 'Login', query: { redirect: route.fullPath } });
+      }
+    } else {
+      alert('요청 처리 중 오류가 발생했습니다.');
+    }
   }
 };
 
@@ -149,7 +158,9 @@ const handleEnroll = () => {
   if (course.value?.url) window.open(course.value.url, '_blank');
 };
 
-onMounted(fetchData);
+onMounted(() => {
+  fetchData(route.params.id);
+});
 </script>
 
 <style scoped>

@@ -28,6 +28,11 @@ class CourseReviewListView(generics.ListAPIView):
         course_id = self.kwargs.get('course_id')
         return CourseReview.objects.filter(course_id=course_id).select_related('user').order_by('-created_at')
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
 # ES 클라이언트 설정
 ES_CLIENT = Elasticsearch(getattr(settings, 'ELASTICSEARCH_URL', 'http://elasticsearch:9200'))
 
@@ -42,13 +47,13 @@ class CourseRecommendationView(APIView):
             return Response([])
 
         try:
-            # 중복 필터링을 위해 넉넉히 20개 가져옴, 출력은 4개
+            # 중복 필터링을 위해 넉넉히 30개 가져옴, 출력은 4개
             res = ES_CLIENT.search(
                 index="kmooc_courses",
                 knn={
                     "field": "embedding",
                     "query_vector": list(query_vector),
-                    "k": 20,
+                    "k": 30,
                     "num_candidates": 200
                 },
                 source=["id"]
