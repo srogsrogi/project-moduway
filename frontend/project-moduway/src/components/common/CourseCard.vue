@@ -2,16 +2,16 @@
   <RouterLink :to="`/courses/${id}`" class="course-card-link">
     <div class="course-card">
       <div class="card-thumb">
-        <span class="badge" :style="{ backgroundColor: badgeColor }">{{ status }}</span>
-        <img v-if="thumbnail" :src="thumbnail" :alt="title" />
+        <span class="badge" :style="{ backgroundColor: badgeColor }">{{ displayStatus }}</span>
+        <img v-if="course_image" :src="course_image" :alt="name" />
         <div v-else class="placeholder-thumb">THUMBNAIL</div>
       </div>
       <div class="card-body">
-        <span class="uni-name">{{ university }}</span>
-        <h3 class="course-title">{{ title }}</h3>
+        <span class="uni-name">{{ org_name }}</span>
+        <h3 class="course-title">{{ name }}</h3>
         <div class="course-info">
-          <span>{{ instructor }}</span>
-          <span>{{ period }}</span>
+          <span>{{ professor }}</span>
+          <span>{{ displayPeriod }}</span>
         </div>
       </div>
     </div>
@@ -19,16 +19,40 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue';
+
+const props = defineProps({
+  // 백엔드 SimpleCourseSerializer 필드명 사용
   id: { type: [Number, String], required: true },
-  title: { type: String, required: true },
-  university: { type: String, required: true },
-  instructor: { type: String, required: true },
-  period: { type: String, required: true },
+  name: { type: String, required: true },              // title → name
+  org_name: { type: String, required: true },          // university → org_name
+  professor: { type: String, required: true },         // instructor → professor
+  course_image: { type: String, default: '' },         // thumbnail → course_image
+
+  // 날짜 필드들 (period 대신 개별 필드)
+  week: { type: Number, default: null },
+  study_start: { type: String, default: '' },
+  study_end: { type: String, default: '' },
+  enrollment_start: { type: String, default: '' },
+  enrollment_end: { type: String, default: '' },
+
+  // 선택적 필드
   status: { type: String, default: '접수중' },
-  badgeColor: { type: String, default: 'var(--primary-dark)' },
-  thumbnail: { type: String, default: '' }
+  badgeColor: { type: String, default: 'var(--primary-dark)' }
 });
+
+// period 계산
+const displayPeriod = computed(() => {
+  if (props.week) {
+    return `${Math.floor(props.week)}주 과정`;
+  } else if (props.study_start && props.study_end) {
+    return `${props.study_start} ~ ${props.study_end}`;
+  }
+  return '기간 미정';
+});
+
+// 상태 표시 (현재는 그대로 사용)
+const displayStatus = computed(() => props.status);
 </script>
 
 <style scoped>

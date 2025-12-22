@@ -31,7 +31,13 @@ class Command(BaseCommand):
                     "middle_classfy_name": {"type": "keyword"},
                     "course_image": {"type": "keyword", "index": False},
                     "url": {"type": "keyword", "index": False},
-                    "content_key": {"type": "keyword"}
+                    "content_key": {"type": "keyword"},
+                    "embedding": {
+                        "type": "dense_vector",
+                        "dims": 1536,
+                        "index": True,
+                        "similarity": "cosine"
+                    }
                 }
             }
         }
