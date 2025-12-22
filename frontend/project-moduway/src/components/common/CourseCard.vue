@@ -21,7 +21,7 @@
         <span class="uni-name">{{ org_name }}</span>
         <h3 class="course-title">{{ name }}</h3>
         <div class="course-info">
-          <span>{{ professor }}</span>
+          <span>{{ formattedProfessor }}</span>
           <span>{{ displayPeriod }}</span>
         </div>
       </div>
@@ -80,6 +80,17 @@ const displayPeriod = computed(() => {
     return `${props.study_start} ~ ${props.study_end}`;
   }
   return '기간 미정';
+});
+
+// 교수명 포맷팅 (쉼표로 구분된 경우 축약)
+const formattedProfessor = computed(() => {
+  if (!props.professor) return '';
+  // 쉼표(,)를 기준으로 분리
+  const names = props.professor.split(',');
+  if (names.length > 1) {
+    return `${names[0].trim()} 외 ${names.length - 1}명`;
+  }
+  return props.professor;
 });
 
 // 상태 표시 (현재는 그대로 사용)
