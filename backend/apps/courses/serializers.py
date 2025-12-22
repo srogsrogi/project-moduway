@@ -60,9 +60,21 @@ class CourseReviewSerializer(serializers.ModelSerializer):
     [설계 의도]
     - 강좌 상세 페이지에서 보여줄 리뷰 목록용 시리얼라이저
     - 작성자 이름(user_name)을 포함하여 UI에 표시
+    - is_owner 필드를 통해 현재 요청자가 리뷰의 소유주인지 여부 판별
     """
     user_name = serializers.CharField(source='user.name', read_only=True)
+    is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = CourseReview
-        fields = ['id', 'user_name', 'rating', 'review_text', 'created_at']
+        fields = ['id', 'user_name', 'rating', 'review_text', 'created_at', 'is_owner']
+
+    def get_is_owner(self, obj):
+        """
+        [로직] 
+        - Serializer가 context로부터 request를 받아, 로그인된 user와 리뷰의 user를 비교
+        """
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            return obj.user == request.user
+        return False

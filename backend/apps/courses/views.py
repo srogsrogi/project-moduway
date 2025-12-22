@@ -28,6 +28,11 @@ class CourseReviewListView(generics.ListAPIView):
         course_id = self.kwargs.get('course_id')
         return CourseReview.objects.filter(course_id=course_id).select_related('user').order_by('-created_at')
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
 # ES 클라이언트 설정
 ES_CLIENT = Elasticsearch(getattr(settings, 'ELASTICSEARCH_URL', 'http://elasticsearch:9200'))
 

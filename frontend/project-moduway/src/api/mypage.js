@@ -30,6 +30,16 @@ export const removeWishlist = (courseId) => {
   return api.delete(`/mypage/wishlist/${courseId}/`);
 };
 
+// 수강평 등록/수정
+export const saveReview = (courseId, reviewData) => {
+  return api.post(`/mypage/courses/${courseId}/rating/`, reviewData);
+};
+
+// 수강평 삭제
+export const deleteReview = (courseId) => {
+  return api.delete(`/mypage/courses/${courseId}/rating/`);
+};
+
 // 커뮤니티 활동 통계 조회
 export const getCommunityStats = () => {
   return api.get('/mypage/community/stats/');
