@@ -1,3 +1,2 @@
-from django.shortcuts import render
+from apps.comparisons.ai_models.processor import get_sentiment_processor
 
-# Create your views here.
