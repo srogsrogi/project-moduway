@@ -43,17 +43,7 @@
         </section>
 
         <section v-if="activeTab === 'reviews'" id="reviews" class="detail-section">
-          <h2>수강평 ({{ course.review_count || 0 }})</h2>
-          <div class="review-list" v-if="reviews.length > 0">
-            <div v-for="review in reviews" :key="review.id" class="review-item">
-              <div class="review-meta">
-                <span class="review-user">{{ review.user_name }}</span>
-                <span class="review-rating">★ {{ review.rating }}</span>
-              </div>
-              <p class="review-text">{{ review.review_text }}</p>
-            </div>
-          </div>
-          <p v-else class="no-data">아직 작성된 수강평이 없습니다.</p>
+          <CourseReviewSection :course-id="route.params.id" />
         </section>
       </main>
 
@@ -96,16 +86,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import axios from 'axios';
 import api from '@/api/index';
+import { getCourseDetail, getRecommendedCourses } from '@/api/courses';
 import { addWishlist, removeWishlist } from '@/api/mypage';
 import CourseCard from '@/components/common/CourseCard.vue';
+import CourseReviewSection from '@/components/course/CourseReviewSection.vue';
 
 const route = useRoute();
 const router = useRouter();
 const activeTab = ref('intro');
 const course = ref(null);
-const reviews = ref([]);
 const recommendedCourses = ref([]);
 
 const formattedSummary = computed(() => {
@@ -116,16 +106,12 @@ const formattedSummary = computed(() => {
 const fetchData = async () => {
   const courseId = route.params.id;
   try {
-    // 1. 강좌 상세 (인증된 경우 is_wished 포함을 위해 api 인스턴스 사용)
-    const detailRes = await api.get(`/courses/${courseId}/`);
+    // 1. 강좌 상세
+    const detailRes = await getCourseDetail(courseId);
     course.value = detailRes.data;
 
-    // 2. 전체 수강평
-    const reviewRes = await api.get(`/courses/${courseId}/reviews/`);
-    reviews.value = reviewRes.data;
-
-    // 3. AI 추천 강좌
-    const recommendRes = await api.get(`/courses/${courseId}/recommendations/`);
+    // 2. AI 추천 강좌
+    const recommendRes = await getRecommendedCourses(courseId);
     recommendedCourses.value = recommendRes.data;
   } catch (error) {
     console.error("데이터 로드 실패:", error);
