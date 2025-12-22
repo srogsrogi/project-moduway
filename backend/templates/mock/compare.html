@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Vault: Life-Learn Style</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
+        :root {
+            --primary: #f64959;
+            --primary-dark: #cc293d;
+            --text-main: #111111;
+            --text-sub: #666666;
+            --bg-light: #f9f9f9;
+            --border: #eeeeee;
+        }
+
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Pretendard', sans-serif; color: var(--text-main); background-color: #fff; }
+
+        /* Custom Slider Style */
+        .custom-slider { appearance: none; height: 4px; background: var(--border); border-radius: 5px; outline: none; }
+        .custom-slider::-webkit-slider-thumb { 
+            appearance: none; width: 18px; height: 18px; 
+            background: var(--primary); border-radius: 50%; cursor: pointer; 
+            border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* Progress Ring */
+        .progress-ring { transition: stroke-dashoffset 0.8s ease-in-out; }
+        
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+    </style>
+</head>
+<body class="antialiased" x-data="aiCompareApp()">
+
+    <header class="sticky top-0 z-50 bg-white/95 border-b border-[#eeeeee] backdrop-blur-md">
+        <div class="max-w-[1400px] mx-auto px-6 flex items-center justify-between h-20">
+            <h1 class="text-2xl font-extrabold tracking-tighter text-[#cc293d]">LIFE-LEARN <span class="text-slate-300 font-light">VAULT</span></h1>
+            <div class="flex items-center gap-4">
+                <div class="bg-[#fff0f2] px-4 py-2 rounded-full border border-[#ffdce0]">
+                    <span class="text-[11px] font-bold text-[#f64959]">분석 가용 포인트: <span x-text="remainingPoints"></span>p</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-[1400px] mx-auto px-6 py-10 grid grid-cols-12 gap-8">
+        
+        <aside class="col-span-12 lg:col-span-4 xl:col-span-3">
+            <div class="sticky top-28 space-y-6 max-h-[calc(100vh-140px)] overflow-y-auto pr-2 custom-scrollbar">
+                
+                <section class="bg-gradient-to-b from-[#fff0f2] to-white rounded-2xl p-6 shadow-sm border border-[#ffdce0] relative overflow-hidden">
+                  <div class="absolute top-0 left-0 w-full h-1 bg-[#f64959]"></div>
+                  
+                  <h2 class="text-xs font-bold uppercase tracking-wider text-[#cc293d] mb-5 flex items-center gap-2">
+                      <span class="w-1.5 h-1.5 bg-[#f64959] rounded-full"></span>
+                      01. 학습 목표 및 시간
+                  </h2>
+                  <div class="space-y-5">
+                      <div>
+                          <label class="block text-[11px] text-slate-500 mb-2 font-semibold">주당 학습 가능 시간</label>
+                          <div class="flex items-center gap-3">
+                              <input type="number" x-model.number="weeklyHours" 
+                                    class="w-full bg-white border border-[#ffdce0] rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#f64959] outline-none transition-all"
+                                    placeholder="0">
+                              <span class="text-xs font-bold text-slate-600">시간</span>
+                          </div>
+                      </div>
+                      <div>
+                          <label class="block text-[11px] text-slate-500 mb-2 font-semibold">학습 목적 (자연어)</label>
+                          <textarea x-model="userGoal" rows="3" 
+                                    class="w-full bg-white border border-[#ffdce0] rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#f64959] outline-none transition-all placeholder:text-slate-300" 
+                                    placeholder="예: 데이터 분석가로 이직하고 싶어요."></textarea>
+                      </div>
+                  </div>
+              </section>
+
+                <section class="bg-white rounded-2xl p-6 border border-[#eeeeee]">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-5">02. 중요도 설정</h2>
+                    <div class="space-y-6">
+                        <template x-for="cr in criteria" :key="cr.key">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-bold text-[#111]" x-text="cr.label"></span>
+                                    <span class="text-[11px] font-black text-[#f64959]" x-text="cr.weight + '%'"></span>
+                                </div>
+                                <input type="range" min="0" max="40" x-model.number="cr.weight" @input="limitWeights(cr)" class="custom-slider w-full">
+                            </div>
+                        </template>
+                    </div>
+                </section>
+
+                <section class="bg-white rounded-2xl p-6 border border-[#eeeeee]">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-5">03. 학습 성향</h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between text-[10px] font-bold text-slate-400">
+                            <span>이론 위주</span>
+                            <span>실습 위주</span>
+                        </div>
+                        <input type="range" x-model="stylePref" class="custom-slider w-full">
+                        
+                    </div>
+                </section>
+
+                <button @click="analyze()" class="w-full py-4 bg-[#f64959] text-white rounded-lg font-bold text-sm hover:bg-[#cc293d] transition-all shadow-lg shadow-red-100">
+                    AI 강좌 비교 분석 시작
+                </button>
+            </div>
+        </aside>
+
+        <section class="col-span-12 lg:col-span-8 xl:col-span-9 space-y-8">
+            
+            <div x-show="aiComment" class="bg-[#fff0f2] border border-[#ffdce0] rounded-2xl p-8 relative overflow-hidden">
+                <div class="relative z-10">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="w-2 h-2 bg-[#f64959] rounded-full animate-pulse"></span>
+                        <span class="text-[11px] font-extrabold text-[#f64959] uppercase tracking-widest">AI 맞춤 코멘트</span>
+                    </div>
+                    <p class="text-lg font-bold text-[#111] leading-relaxed">
+                        "<span x-text="aiComment"></span>"
+                    </p>
+                    <p class="text-[11px] mt-4 text-[#888]">※ AI 분석은 참고용이며 최종 결정은 학습자의 판단이 필요합니다.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <template x-for="res in sortedResults" :key="res.id">
+                    <div class="bg-white rounded-3xl border border-[#eeeeee] overflow-hidden hover:shadow-2xl hover:border-[#ffdce0] transition-all duration-300 flex flex-col">
+                        
+                        <div class="p-8 pb-0">
+                            <div class="flex justify-between items-start mb-6">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded" x-text="res.orgName"></span>
+                                        <template x-if="res.reviewCount < 10">
+                                            <span class="px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded">데이터 부족</span>
+                                        </template>
+                                    </div>
+                                    <h3 class="text-xl font-bold text-[#111] leading-tight group-hover:text-[#f64959]" x-text="res.name"></h3>
+                                </div>
+                                
+                                <div class="relative w-20 h-20">
+                                    <svg class="w-full h-full transform -rotate-90">
+                                        <circle cx="40" cy="40" r="36" stroke="#f0f0f0" stroke-width="6" fill="transparent" />
+                                        <circle cx="40" cy="40" r="36" stroke="#f64959" stroke-width="6" fill="transparent" 
+                                                class="progress-ring"
+                                                :style="`stroke-dasharray: 226.1; stroke-dashoffset: ${226.1 * (1 - res.totalScore/100)}`" />
+                                    </svg>
+                                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span class="text-lg font-black text-[#111]" x-text="Math.round(res.totalScore)"></span>
+                                        <span class="text-[8px] font-bold text-slate-400 uppercase">Match</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-[#f9f9f9] rounded-xl p-4 mb-6 border border-[#eee]">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[11px] font-bold text-slate-500">타임라인 시뮬레이션</span>
+                                </div>
+                                <p class="text-xs font-semibold text-[#444]">
+                                    수강 종료일까지 매주 <span class="text-[#f64959]" x-text="res.minHoursPerWeek"></span>시간 이상의 학습이 권장됩니다.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="px-8 pb-8 space-y-6 flex-1">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">긍정 리뷰 비율</span>
+                                    <div class="text-sm font-bold text-emerald-500" x-text="res.sentiment + '% Positive'"></div>
+                                </div>
+                                <div class="space-y-1 text-right">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">분석 신뢰도</span>
+                                    <div class="text-sm font-bold" :class="res.reviewCount > 10 ? 'text-blue-500' : 'text-amber-500'" x-text="res.reviewCount > 10 ? '높음' : '주의'"></div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase">강좌 핵심 요약</span>
+                                <p class="text-[12px] text-slate-600 leading-relaxed" x-text="res.reviewSummary"></p>
+                            </div>
+
+                            <div class="space-y-3 pt-4 border-t border-[#eee]">
+                                <template x-for="cr in criteria" :key="cr.key">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-[11px] font-medium text-slate-500" x-text="cr.label"></span>
+                                        <div class="flex items-center gap-3 flex-1 ml-6">
+                                            <div class="h-1 bg-slate-100 rounded-full flex-1 overflow-hidden">
+                                                <div class="h-full bg-[#111] transition-all duration-1000" :style="`width: ${res.scores[cr.key]}%`"></div>
+                                            </div>
+                                            <span class="text-[11px] font-bold text-[#111] w-6" x-text="res.scores[cr.key]"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="p-6 bg-[#f9f9f9] border-t border-[#eee]">
+                            <button class="w-full py-3 bg-white border border-[#f64959] text-[#f64959] rounded-lg font-bold text-xs hover:bg-[#f64959] hover:text-white transition-all">
+                                강좌 상세 정보 및 수강신청
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function aiCompareApp() {
+            return {
+                weeklyHours: 12,
+                userGoal: "비전공자이지만 데이터 분석 역량을 키워 이직하고 싶습니다.",
+                stylePref: 70,
+                skills: ['Excel 기초', '비즈니스 영어'],
+                maxTotalWeight: 100,
+                aiComment: "보유하신 Excel 스킬을 활용할 수 있으면서도 실무 비중이 높은 'SQL & 데이터 이직' 과정을 우선 추천드립니다.",
+                criteria: [
+                    { key: "practical", label: "실무 활용도", weight: 40 },
+                    { key: "theory", label: "이론적 깊이", weight: 20 },
+                    { key: "difficulty", label: "학습 난이도", weight: 20 },
+                    { key: "trend", label: "최신 트렌드", weight: 20 }
+                ],
+                wishlist: [
+                    { 
+                        id: 1, name: "파이썬을 활용한 빅데이터 분석 기초", orgName: "서울대학교", 
+                        minHoursPerWeek: 8, reviewCount: 124, sentiment: 92,
+                        reviewSummary: "기초부터 탄탄하게 잡아주지만 과제가 다소 많아 가용 시간이 충분해야 합니다.",
+                        scores: { practical: 85, theory: 95, difficulty: 70, trend: 88 }
+                    },
+                    { 
+                        id: 2, name: "누구나 쉽게 배우는 핀테크 입문", orgName: "K-MOOC 제휴", 
+                        minHoursPerWeek: 4, reviewCount: 8, sentiment: 75,
+                        reviewSummary: "입문자용으로 적합하며 가볍게 트렌드를 파악하기 좋으나 깊이는 다소 아쉽습니다.",
+                        scores: { practical: 60, theory: 50, difficulty: 30, trend: 95 }
+                    }
+                ],
+                selectedIds: [1, 2],
+
+                get remainingPoints() {
+                    return this.maxTotalWeight - this.criteria.reduce((s, cr) => s + cr.weight, 0);
+                },
+
+                limitWeights(changedCr) {
+                    const total = this.criteria.reduce((s, cr) => s + cr.weight, 0);
+                    if (total > this.maxTotalWeight) {
+                        changedCr.weight -= (total - this.maxTotalWeight);
+                    }
+                },
+
+                get sortedResults() {
+                    return this.wishlist
+                        .filter(c => this.selectedIds.includes(c.id))
+                        .map(c => {
+                            const totalWeight = this.criteria.reduce((s, cr) => s + cr.weight, 0);
+                            const weightedSum = this.criteria.reduce((s, cr) => s + (c.scores[cr.key] * cr.weight), 0);
+                            const finalScore = totalWeight > 0 ? (weightedSum / (totalWeight * 100)) * 100 : 0;
+                            return { ...c, totalScore: finalScore };
+                        })
+                        .sort((a, b) => b.totalScore - a.totalScore);
+                },
+
+                analyze() {
+                    alert("AI 분석 엔진이 작동 중입니다...");
+                }
+            }
+        }
+    </script>
+</body>
+</html>
