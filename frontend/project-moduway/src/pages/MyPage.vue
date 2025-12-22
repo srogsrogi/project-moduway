@@ -3,20 +3,17 @@
     <div class="mypage-container">
 
       <div class="user-welcome">
-        <h1>안녕하세요, 김싸피님!</h1>
-        <p>ssafy@email.com</p>
-        <div class="user-status-tag">취업 준비</div>
+        <h1>안녕하세요, {{ user?.name || '사용자' }}님!</h1>
+        <p>{{ user?.email || '' }}</p>
       </div>
 
       <div class="tab-nav">
         <a href="#" :class="{ active: currentTab === 'learning-status' }" @click.prevent="currentTab = 'learning-status'">학습 현황</a>
-        <a href="#" :class="{ active: currentTab === 'custom-setting' }" @click.prevent="currentTab = 'custom-setting'">관심 분야 설정</a> 
         <a href="#" :class="{ active: currentTab === 'community-activity' }" @click.prevent="currentTab = 'community-activity'">커뮤니티</a>
         <a href="#" :class="{ active: currentTab === 'my-account' }" @click.prevent="currentTab = 'my-account'">내 계정</a>
       </div>
 
       <LearningStatusTab v-if="currentTab === 'learning-status'" />
-      <CustomSettingTab v-if="currentTab === 'custom-setting'" />
       <CommunityActivityTab v-if="currentTab === 'community-activity'" />
       <MyAccountTab v-if="currentTab === 'my-account'" />
 
@@ -25,13 +22,23 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import LearningStatusTab from '@/components/mypage/LearningStatusTab.vue';
-import CustomSettingTab from '@/components/mypage/CustomSettingTab.vue';
 import CommunityActivityTab from '@/components/mypage/CommunityActivityTab.vue';
-import MyAccountTab from '@/components/mypage/MyAccountTab.vue'; // Need to create this one
+import MyAccountTab from '@/components/mypage/MyAccountTab.vue';
+import { getProfile } from '@/api/mypage';
 
 const currentTab = ref('learning-status');
+const user = ref(null);
+
+onMounted(async () => {
+  try {
+    const response = await getProfile();
+    user.value = response.data;
+  } catch (error) {
+    console.error('사용자 정보를 가져오는데 실패했습니다:', error);
+  }
+});
 </script>
 
 <style scoped>
