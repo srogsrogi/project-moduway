@@ -62,7 +62,7 @@
             <li><span>총 학습 시간</span> <strong>{{ Math.round(course.course_playtime / 3600) }}시간</strong></li>
             <li><span>이수증</span> <strong>{{ course.certificate_yn === 'Y' ? '발급 가능' : '해당 없음' }}</strong></li>
           </ul>
-          <a :href="course.url" target="_blank" class="btn-external">K-MOOC 원문 보기 ↗</a>
+          <a :href="course.url" target="_blank" class="btn-external">K-MOOC 바로가기 ↗</a>
         </div>
       </aside>
     </div>
@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/api/index';
 import { getCourseDetail, getRecommendedCourses } from '@/api/courses';
@@ -103,8 +103,8 @@ const formattedSummary = computed(() => {
 });
 
 // 데이터 로드 통합 함수
-const fetchData = async () => {
-  const courseId = route.params.id;
+const fetchData = async (courseId) => {
+  if (!courseId) return;
   try {
     // 1. 강좌 상세
     const detailRes = await getCourseDetail(courseId);
@@ -113,10 +113,22 @@ const fetchData = async () => {
     // 2. AI 추천 강좌
     const recommendRes = await getRecommendedCourses(courseId);
     recommendedCourses.value = recommendRes.data;
+    
+    // 탭 초기화 및 스크롤 상단 이동
+    activeTab.value = 'intro';
+    window.scrollTo(0, 0);
   } catch (error) {
     console.error("데이터 로드 실패:", error);
   }
 };
+
+// 라우트 파라미터 변경 감지
+watch(
+  () => route.params.id,
+  (newId) => {
+    fetchData(newId);
+  }
+);
 
 // 찜하기 토글
 const handleWishlistToggle = async () => {
@@ -146,7 +158,9 @@ const handleEnroll = () => {
   if (course.value?.url) window.open(course.value.url, '_blank');
 };
 
-onMounted(fetchData);
+onMounted(() => {
+  fetchData(route.params.id);
+});
 </script>
 
 <style scoped>
