@@ -1,9 +1,14 @@
 <template>
   <div class="post-detail-main">
     <router-link to="/community" class="link-back">← 목록으로 돌아가기</router-link>
-    <div class="post-container">
-      
-      <div class="post-category-tag">{{ post.category }}</div>
+
+    <div v-if="loading" style="text-align: center; padding: 60px;">
+      <p>게시글을 불러오는 중...</p>
+    </div>
+
+    <div v-else-if="post" class="post-container">
+
+      <div class="post-category-tag">{{ getBoardKoreanName(post.board.name) }}</div>
       <h1 class="post-header-title">
         {{ post.title }}
       </h1>
@@ -11,61 +16,47 @@
       <div class="post-meta-info">
         <div class="author-info">
           <div class="profile-img"></div>
-          <span class="nickname">{{ post.author }}</span>
-          <span style="color: var(--text-sub);">{{ post.date }} 등록</span>
+          <span class="nickname">{{ post.author.name }}</span>
+          <span style="color: var(--text-sub);">{{ formatDate(post.created_at) }} 등록</span>
         </div>
         <div class="meta-stats">
-          <span>조회 {{ post.views }}</span>
-          <span>추천 {{ post.likes }}</span>
-          <span>스크랩 {{ post.scraps }}</span>
+          <span>추천 {{ post.likes_count }}</span>
+          <span>댓글 {{ post.comments.length }}</span>
         </div>
       </div>
 
       <div class="post-content">
         <p v-for="(paragraph, index) in post.content.split('\n')" :key="index">{{ paragraph }}</p>
-        <p v-if="post.tags" style="margin-top: 25px; font-style: italic; color: #999;">
-            {{ post.tags }}
-        </p>
       </div>
 
       <div class="post-actions">
-        <button class="action-button" :class="{ active: post.liked }" @click="toggleLike">
+        <button class="action-button" :class="{ active: post.is_liked }" @click="toggleLike">
           👍 추천
-          <span style="color: inherit; font-size: 16px;">{{ post.likes }}</span>
+          <span style="color: inherit; font-size: 16px;">{{ post.likes_count }}</span>
         </button>
-        <button class="action-button" :class="{ active: post.scraped }" @click="toggleScrap">
+        <button class="action-button" :class="{ active: post.is_scrapped }" @click="toggleScrap">
           📎 스크랩
-          <span style="color: inherit; font-size: 16px;">{{ post.scraps }}</span>
-        </button>
-        <button class="action-button">
-          ... 신고
         </button>
       </div>
 
       <div class="comment-section">
-        <div class="comment-count">
-          댓글 <span style="color: var(--primary-dark);">{{ comments.length }}</span>개
-        </div>
+        
+        <!-- 댓글 작성 폼 -->
+        <CommentForm 
+          :replyTo="replyTo" 
+          @submit="addComment" 
+          @cancel="cancelReply" 
+        />
 
-        <div class="comment-input-box">
-          <textarea placeholder="댓글을 남겨보세요. 매너 있는 댓글 문화 부탁드립니다." v-model="newCommentContent"></textarea>
-          <div class="comment-submit">
-            <button class="btn btn-primary" style="padding: 8px 15px;" @click="addComment">등록</button>
-          </div>
-        </div>
+        <!-- 댓글 목록 -->
+        <CommentList 
+          :comments="post.comments"
+          :postId="post.id"
+          :currentUser="currentUser"
+          @delete="handleDeleteComment"
+          @reply="startReply"
+        />
 
-        <ul class="comment-list">
-          <li v-for="comment in comments" :key="comment.id" class="comment-item">
-            <div class="comment-meta">
-              <div class="profile-img"></div>
-              <span class="nickname">{{ comment.author }}</span>
-              <span class="date">{{ comment.date }}</span>
-            </div>
-            <div class="comment-content">
-              {{ comment.content }}
-            </div>
-          </li>
-        </ul>
       </div>
 
     </div>
@@ -73,66 +64,162 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { getPostDetail, toggleLike as toggleLikeAPI, toggleScrap as toggleScrapAPI, createComment, deleteComment } from '@/api/community';
+import { useAuthStore } from '@/stores/auth';
+import CommentList from '@/components/community/CommentList.vue';
+import CommentForm from '@/components/community/CommentForm.vue';
 
 const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
 
-const post = ref({
-  id: route.params.id,
-  category: '컴퓨터 왁자지껄 (강의후기)',
-  title: '[강의후기] 파이썬 기초 강의, 비전공자도 듣기 쉬웠어요!',
-  author: '개발바라기',
-  date: '2025.12.14',
-  views: 759,
-  likes: 12,
-  scraps: 1,
-  content: `안녕하세요! 저는 비전공자인데, 이번에 처음으로 파이썬 기초 강의를 수강해봤습니다.
-처음에는 코딩이라는 것 자체가 너무 어렵게 느껴졌는데, 교수님께서 예제를 생활 속 이야기로 풀어주셔서 이해하기가 정말 쉬웠습니다. 특히 실습 위주로 진행되어서 단순히 이론만 듣는 것보다 훨씬 재미있었고 기억에도 잘 남았습니다.
-혹시 컴퓨터 분야에 관심은 있지만 겁부터 나서 시작 못 하신 분들이 있다면, 이 강의 강력 추천합니다!`,
-  tags: '#파이썬 #비전공자 #강의후기 #컴퓨터기초 #강력추천',
-  liked: false,
-  scraped: false,
-});
+const post = ref(null);
+const loading = ref(false);
+const replyTo = ref(null); // 답글 대상 댓글
 
-const comments = ref([
-  { id: 1, author: '코딩꿈나무', date: '2025.12.14 15:30', content: '오! 저도 이 강의 고민하고 있었는데 후기 감사합니다! 바로 신청해야겠어요.' },
-  { id: 2, author: '자바마스터', date: '2025.12.14 16:10', content: '맞아요, 교수님 정말 좋으시죠. 파이썬 다음으로 자바 강의도 꼭 들어보세요!' },
-]);
+const isAuthenticated = computed(() => authStore.isAuthenticated);
+const currentUser = computed(() => authStore.user);
 
-const newCommentContent = ref('');
-
-const toggleLike = () => {
-  post.value.liked = !post.value.liked;
-  post.value.likes += post.value.liked ? 1 : -1;
-  // TODO: API call to update like status
+// 게시판 이름 매핑
+const categoryMap = {
+  humanity: '인문', social: '사회', education: '교육',
+  engineering: '공학', natural: '자연', medical: '의약',
+  arts_pe: '예체능', convergence: '융·복합', etc: '기타',
+  notice: '공지'
 };
 
-const toggleScrap = () => {
-  post.value.scraped = !post.value.scraped;
-  post.value.scraps += post.value.scraped ? 1 : -1;
-  // TODO: API call to update scrap status
+const typeMap = {
+  talk: '소통방', review: '강의후기', qna: '질문방'
 };
 
-const addComment = () => {
-  if (newCommentContent.value.trim() === '') {
-    alert('댓글 내용을 입력해주세요.');
+const getBoardKoreanName = (boardName) => {
+  if (!boardName) return '';
+  if (boardName === 'notice') return '공지/운영';
+  
+  const parts = boardName.split('_');
+  if (parts.length === 2) {
+    const cat = categoryMap[parts[0]] || parts[0];
+    const type = typeMap[parts[1]] || parts[1];
+    return `${cat} - ${type}`;
+  }
+  return boardName;
+};
+
+// 날짜 포맷팅
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}.${month}.${day} ${hours}:${minutes}`;
+};
+
+// 게시글 상세 조회
+const fetchPost = async () => {
+  loading.value = true;
+  try {
+    const response = await getPostDetail(route.params.id);
+    post.value = response.data;
+  } catch (error) {
+    console.error('게시글 조회 실패:', error);
+    alert('게시글을 불러오는데 실패했습니다.');
+    router.push('/community');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 좋아요 토글
+const toggleLike = async () => {
+  if (!isAuthenticated.value) {
+    alert('로그인이 필요한 기능입니다.');
     return;
   }
-  const newComment = {
-    id: comments.value.length + 1, // Simple ID generation
-    author: '현재 사용자 (Mock)', // TODO: Replace with actual user
-    date: new Date().toLocaleString(),
-    content: newCommentContent.value,
-  };
-  comments.value.push(newComment);
-  newCommentContent.value = '';
-  // TODO: API call to add comment
+
+  try {
+    const response = await toggleLikeAPI(route.params.id);
+    post.value.is_liked = response.data.is_liked;
+    post.value.likes_count = response.data.likes_count;
+  } catch (error) {
+    console.error('좋아요 실패:', error);
+    alert('좋아요 처리에 실패했습니다.');
+  }
+};
+
+// 스크랩 토글
+const toggleScrap = async () => {
+  if (!isAuthenticated.value) {
+    alert('로그인이 필요한 기능입니다.');
+    return;
+  }
+
+  try {
+    const response = await toggleScrapAPI(route.params.id);
+    post.value.is_scrapped = response.data.is_scrapped;
+  } catch (error) {
+    console.error('스크랩 실패:', error);
+    alert('스크랩 처리에 실패했습니다.');
+  }
+};
+
+// 댓글 작성
+const addComment = async (content) => {
+  if (!isAuthenticated.value) {
+    alert('로그인이 필요한 기능입니다.');
+    return;
+  }
+
+  try {
+    const data = {
+      content: content,
+    };
+    if (replyTo.value) {
+      data.parent = replyTo.value.id;
+    }
+
+    await createComment(route.params.id, data);
+    
+    // 성공 시 초기화 및 갱신
+    replyTo.value = null;
+    await fetchPost(); 
+  } catch (error) {
+    console.error('댓글 작성 실패:', error);
+    alert('댓글 작성에 실패했습니다.');
+  }
+};
+
+// 댓글 삭제
+const handleDeleteComment = async (commentId) => {
+  if (!confirm('댓글을 삭제하시겠습니까?')) {
+    return;
+  }
+
+  try {
+    await deleteComment(route.params.id, commentId);
+    await fetchPost(); // 댓글 삭제 후 새로고침
+  } catch (error) {
+    console.error('댓글 삭제 실패:', error);
+    alert('댓글 삭제에 실패했습니다.');
+  }
+};
+
+// 답글 작성 시작
+const startReply = (comment) => {
+  replyTo.value = comment;
+  // CommentForm에 포커스를 주거나 스크롤 이동하는 로직을 추가하면 좋음 (선택사항)
+};
+
+// 답글 취소
+const cancelReply = () => {
+  replyTo.value = null;
 };
 
 onMounted(() => {
-  // In a real application, you would fetch post and comments data based on route.params.id
-  console.log('Fetching post details for ID:', route.params.id);
+  fetchPost();
 });
 </script>
 
@@ -140,7 +227,7 @@ onMounted(() => {
 /* ================================================= */
 /* 게시글 상세 스타일 */
 /* ================================================= */
-.post-detail-main { padding: 40px 0; max-width: 900px; margin: 0 auto; padding-left: 20px; padding-right: 20px;} /* Add padding for responsiveness */
+.post-detail-main { padding: 40px 0; max-width: 900px; margin: 0 auto; padding-left: 20px; padding-right: 20px; width: 100%; } /* Add padding for responsiveness */
 
 .post-container {
     background-color: var(--bg-white);
@@ -322,6 +409,52 @@ onMounted(() => {
     font-size: 14px;
     padding-left: 32px;
     color: var(--text-main);
+    margin-bottom: 8px;
+}
+
+.comment-actions {
+    padding-left: 32px;
+    display: flex;
+    gap: 10px;
+}
+
+.comment-actions .action-btn {
+    background: none;
+    border: none;
+    color: var(--text-sub);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.2s;
+}
+
+.comment-actions .action-btn:hover {
+    color: var(--primary);
+}
+
+.comment-actions .action-btn.delete:hover {
+    color: #dc2626;
+}
+
+.reply-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--primary-light);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: var(--primary-dark);
+}
+
+.reply-info .cancel-btn {
+    background: none;
+    border: none;
+    color: var(--primary-dark);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 /* 반응형 */

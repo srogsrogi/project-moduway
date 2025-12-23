@@ -4,7 +4,7 @@
       
       <BoardCategoryList @select-board="handleBoardSelect" />
 
-      <main class="main-content">
+      <div class="board-content">
         
         <div class="search-container">
           <input 
@@ -25,32 +25,7 @@
           {{ boardDescription }}
         </div>
         
-        <table class="post-table">
-          <thead>
-            <tr>
-              <th class="col-no">번호</th>
-              <th class="col-type">게시판</th>
-              <th class="col-title">제목</th>
-              <th class="col-author">글쓴이</th>
-              <th class="col-date">등록일</th>
-              <th class="col-views">조회</th>
-              <th class="col-likes">추천</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="post in posts" :key="post.id" :class="{ notice: post.isNotice }">
-              <td class="col-no">{{ post.isNotice ? '공지' : post.id }}</td>
-              <td class="col-type">{{ post.category }}</td>
-              <td class="col-title">
-                <router-link :to="`/community/posts/${post.id}`">{{ post.title }}</router-link>
-              </td>
-              <td class="col-author">{{ post.author }}</td>
-              <td class="col-date">{{ post.date }}</td>
-              <td class="col-views">{{ post.views }}</td>
-              <td class="col-likes">{{ post.likes }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <PostList :posts="posts" :loading="loading" />
         
         <div class="pagination">
           <a href="#">&lt;&lt;</a>
@@ -63,90 +38,124 @@
           <a href="#">&gt;</a>
           <a href="#">&gt;&gt;</a>
         </div>
-      </main>
+      </div>
       
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import BoardCategoryList from '@/components/community/BoardCategoryList.vue';
+import PostList from '@/components/community/PostList.vue';
+import { getPostsByBoardId, searchPosts } from '@/api/community';
 
 const currentBoardTitle = ref('⭐ BEST 인기글');
-const currentBoardId = ref('best_all');
+const currentBoardId = ref(null);
 const isAllSearch = ref(true);
 const searchQuery = ref('');
+const posts = ref([]);
+const loading = ref(false);
 
 const searchPlaceholder = computed(() => {
   return isAllSearch.value ? '전체 게시판에서 검색해보세요.' : `'${currentBoardTitle.value}' 게시판에서 검색해보세요.`;
 });
 
 const boardDescription = computed(() => {
-  if (currentBoardId.value === 'best_all') return '랭커들이 가장 많이 찾아 본 실시간 인기글을 모았습니다.';
-  if (currentBoardId.value === 'notice') return 'LIFE-LEARN의 새로운 소식과 알림을 확인하세요.';
+  if (!currentBoardId.value) return '사용자들이 가장 많이 찾아 본 실시간 인기글을 모았습니다.';
   return `${currentBoardTitle.value} 게시판입니다. 자유롭게 소통해보세요.`;
 });
 
-// Helper function to extract main category from boardId
-const getMainCategory = (boardId) => {
-  if (boardId === 'best_all') return ''; // 'best_all'은 특정 카테고리가 아님
-  if (boardId === 'notice') return 'notice';
-  return boardId.split('_')[0];
+// 게시글 목록 조회
+const fetchPosts = async (boardId = null) => {
+  loading.value = true;
+  try {
+    let response;
+    if (boardId) {
+      response = await getPostsByBoardId(boardId);
+    } else {
+      // BEST 인기글: 전체 게시글 조회 후 좋아요순 정렬
+      response = await searchPosts({ q: '' });
+    }
+    
+    // DRF Pagination 처리
+    if (response.data.results) {
+        posts.value = response.data.results;
+        // TODO: response.data.count, next, previous 처리 (페이지네이션 UI 연동 시)
+    } else {
+        posts.value = response.data;
+    }
+  } catch (error) {
+    console.error('게시글 목록 조회 실패:', error);
+    alert('게시글을 불러오는데 실패했습니다.');
+    posts.value = [];
+  } finally {
+    loading.value = false;
+  }
 };
 
-// Helper function to extract sub category from boardId
-const getSubCategory = (boardId) => {
-  if (boardId === 'best_all' || boardId === 'notice') return '';
-  return boardId.split('_')[1];
-};
-
-// Mock Data
-const posts = ref([
-  { id: 1001, isNotice: true, category: '공지/운영', title: '[필독] 커뮤니티 이용 수칙 및 운영 가이드 안내', author: '운영자', date: '2025.12.16', views: 50, likes: 0 },
-  { id: 12, isNotice: false, category: '인공지능 소통방', title: '요즘 인공지능 윤리 강의 들으시는 분 계신가요?', author: 'AI마니아', date: '2025.12.15', views: 691, likes: 7 },
-  { id: 11, isNotice: false, category: '수학 질문방', title: '수학의 정석: 이산수학 강의, 2주차 문제가 너무 어렵습니다 (도와주세요)', author: 'MATH_LVR', date: '2025.12.15', views: 520, likes: 5 },
-  { id: 10, isNotice: false, category: '컴퓨터 강의후기', title: '[강의후기] 파이썬 기초 강의, 비전공자도 듣기 쉬웠어요!', author: '개발바라기', date: '2025.12.14', views: 759, likes: 12 },
-  { id: 9, isNotice: false, category: '인문학 소통방', title: '서양 철학사 강의 들으면 인생이 바뀌나요? (진지)', author: '철학자K', date: '2025.12.14', views: 488, likes: 3 },
-]);
-
+// 게시판 선택
 const handleBoardSelect = (payload) => {
   currentBoardTitle.value = payload.boardName;
-  currentBoardId.value = payload.boardId;
+  currentBoardId.value = payload.boardId === 'best_all' ? null : payload.boardId;
   isAllSearch.value = payload.isAllSearch;
-  // TODO: Fetch posts for the selected board
-  console.log(`Board selected: ${payload.boardId}`);
+  fetchPosts(currentBoardId.value);
 };
 
-const handleSearch = () => {
+// 검색
+const handleSearch = async () => {
   if (!searchQuery.value.trim()) {
     alert('검색어를 입력해주세요.');
     return;
   }
-  
-  let apiUrl = '';
-  if (isAllSearch.value) {
-    apiUrl = `community/posts/${searchQuery.value}`;
-  } else {
-    apiUrl = `community/board/${currentBoardId.value}/posts/${searchQuery.value}`;
+
+  loading.value = true;
+  try {
+    const params = { q: searchQuery.value };
+    if (!isAllSearch.value && currentBoardId.value) {
+      params.board_id = currentBoardId.value;
+    }
+    const response = await searchPosts(params);
+    posts.value = response.data;
+  } catch (error) {
+    console.error('검색 실패:', error);
+    alert('검색에 실패했습니다.');
+  } finally {
+    loading.value = false;
   }
-  
-  console.log(`Search URL: ${apiUrl}`);
-  alert(`"${searchQuery.value}"(으)로 검색 요청\nAPI Path: ${apiUrl}`);
 };
+
+// Helper function to extract main category from boardId
+const getMainCategory = (boardId) => {
+  if (!boardId || boardId === 'best_all') return '';
+  return String(boardId).split('_')[0];
+};
+
+// Helper function to extract sub category from boardId
+const getSubCategory = (boardId) => {
+  if (!boardId || boardId === 'best_all') return '';
+  const parts = String(boardId).split('_');
+  return parts.length > 1 ? parts[1] : '';
+};
+
+// 초기 로드
+onMounted(() => {
+  fetchPosts();
+});
 </script>
 
 <style scoped>
 /* 커뮤니티 전용 레이아웃 */
-.community-main { padding: 40px 0; }
+.community-main { padding: 40px 0; width: 100%; }
 .layout-grid {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 240px minmax(0, 1fr);
     gap: 30px;
+    align-items: start;
 }
 
 /* 2. 메인 게시판 목록 */
-.main-content {
+.board-content {
     background-color: var(--bg-white);
     padding: 30px;
     border-radius: 8px;
@@ -242,25 +251,17 @@ const handleSearch = () => {
     color: var(--text-main);
 }
 
-.post-table .col-no { width: 5%; color: var(--text-sub); }
+.post-table .col-no { width: 8%; color: var(--text-sub); }
 .post-table .col-type { width: 15%; font-weight: 600; color: var(--primary-dark); }
 .post-table .col-title { text-align: left; padding-left: 15px; }
 .post-table .col-title a { text-decoration: none; color: inherit; display: block; }
-.post-table .col-author { width: 10%; }
-.post-table .col-date { width: 10%; color: var(--text-sub); }
-.post-table .col-views { width: 5%; color: var(--text-sub); }
-.post-table .col-likes { width: 5%; color: var(--primary); }
+.post-table .col-author { width: 12%; }
+.post-table .col-date { width: 12%; color: var(--text-sub); }
+.post-table .col-likes { width: 8%; color: var(--primary); }
 
 .post-table tr:hover {
     background-color: var(--primary-light);
 }
-
-/* 공지사항 스타일 */
-.post-table tr.notice {
-    background-color: var(--primary-light);
-    font-weight: 700;
-}
-.post-table tr.notice .col-type { color: var(--primary-dark); }
 
 /* 페이징 */
 .pagination {
