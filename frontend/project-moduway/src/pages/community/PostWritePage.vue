@@ -24,9 +24,6 @@
                 <option value="review">왁자지껄 (강의후기)</option>
                 <option value="qna">주고받고 (강의질문방)</option>
               </select>
-              <span v-if="form.mainCategory === 'notice'" style="font-size: 13px; color: var(--primary-dark); align-self: center;">
-                * 공지/운영 선택 시 소분류는 무시됩니다.
-              </span>
             </div>
           </div>
 
@@ -54,15 +51,6 @@
             ></textarea>
           </div>
 
-          <div class="form-group">
-            <label>첨부 파일</label>
-            <label for="fileUpload" class="file-upload-box">
-              클릭하거나 파일을 드래그하여 첨부 (최대 5개, 10MB 이하)
-              <input type="file" id="fileUpload" multiple @change="handleFileChange">
-              <div class="file-info">{{ fileListText }}</div>
-            </label>
-          </div>
-
           <div class="action-buttons">
             <button type="button" class="btn btn-outline" @click="$router.back()">취소</button>
             <button type="submit" class="btn btn-primary">{{ isEditMode ? '수정하기' : '등록하기' }}</button>
@@ -77,6 +65,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { createPost, updatePost, getPostDetail } from '@/api/community';
 
 const route = useRoute();
 const router = useRouter();
@@ -87,8 +76,7 @@ const form = ref({
   mainCategory: '',
   subCategory: '',
   title: '',
-  content: '',
-  files: []
+  content: ''
 });
 
 const mainCategories = [
@@ -100,15 +88,9 @@ const mainCategories = [
   { value: 'medical', label: '의약' },
   { value: 'arts_pe', label: '예체능' },
   { value: 'convergence', label: '융·복합' },
-  { value: 'notice', label: '공지/운영' },
+  { value: 'etc', label: '기타' },
+  { value: 'notice', label: '공지사항' },
 ];
-
-const fileListText = computed(() => {
-  if (form.value.files.length > 0) {
-    return `첨부 파일: ${Array.from(form.value.files).map(f => f.name).join(', ')}`;
-  }
-  return '첨부된 파일 없음';
-});
 
 const handleMainCategoryChange = () => {
   if (form.value.mainCategory === 'notice') {
@@ -116,11 +98,7 @@ const handleMainCategoryChange = () => {
   }
 };
 
-const handleFileChange = (event) => {
-  form.value.files = event.target.files;
-};
-
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!form.value.mainCategory) {
     alert('게시판 대분류를 선택해주세요.');
     return;
@@ -130,29 +108,61 @@ const handleSubmit = () => {
     return;
   }
 
+  // 게시판 식별자 생성 (예: humanity_talk)
   let boardName = form.value.mainCategory;
   if (form.value.mainCategory !== 'notice') {
     boardName = `${form.value.mainCategory}_${form.value.subCategory}`;
   }
 
-  // API Call Simulation
-  console.log('Form submitted:', { ...form.value, boardName });
-  alert(`${isEditMode.value ? '게시글 수정' : '게시글 등록'} 요청\n게시판: ${boardName}\n제목: ${form.value.title}`);
-  
-  router.push('/community');
+  try {
+    const postData = {
+      title: form.value.title,
+      content: form.value.content,
+    };
+    
+    if (isEditMode.value) {
+      await updatePost(route.params.id, postData);
+      alert('게시글이 수정되었습니다.');
+    } else {
+      await createPost(boardName, postData);
+      alert('게시글이 등록되었습니다.');
+    }
+    
+    router.push('/community');
+  } catch (error) {
+    console.error('게시글 저장 실패:', error);
+    alert('게시글 저장에 실패했습니다.');
+  }
+};
+
+const fetchPostData = async (id) => {
+  try {
+    const response = await getPostDetail(id);
+    const post = response.data;
+    
+    form.value.title = post.title;
+    form.value.content = post.content;
+    
+    // board.name (예: "humanity_talk" 또는 "자유게시판") 파싱 로직 필요
+    if (post.board && post.board.name) {
+      const parts = post.board.name.split('_');
+      if (parts.length >= 2) {
+        form.value.mainCategory = parts[0];
+        form.value.subCategory = parts[1];
+      } else if (parts[0] === 'notice') {
+        form.value.mainCategory = 'notice';
+      }
+    }
+  } catch (error) {
+    console.error('게시글 불러오기 실패:', error);
+    alert('게시글 정보를 불러오지 못했습니다.');
+    router.push('/community');
+  }
 };
 
 onMounted(() => {
   if (isEditMode.value) {
-    // Mock data fetching for edit mode
-    // In real app: fetchPost(route.params.id)
-    form.value = {
-      mainCategory: 'humanity',
-      subCategory: 'talk',
-      title: '수정할 게시글 제목 예시',
-      content: '기존 게시글 내용입니다.',
-      files: []
-    };
+    fetchPostData(route.params.id);
   } else {
     // For new post, check query parameters
     const mainCatParam = route.query.mainCat;
