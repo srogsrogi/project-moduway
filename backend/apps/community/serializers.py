@@ -39,8 +39,8 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ('id', 'username', 'email')
-        read_only_fields = ('id', 'username', 'email')
+        fields = ('id', 'username', 'email', 'name')
+        read_only_fields = ('id', 'username', 'email', 'name')
 
 
 # 1.1 BoardSerializer | 게시판 목록
@@ -130,7 +130,8 @@ class PostSerializer(serializers.ModelSerializer):
     board_id = serializers.PrimaryKeyRelatedField(
         queryset=Board.objects.all(),
         source='board',
-        write_only=True
+        write_only=True,
+        required=False
     )
 
     # [설계의도]
