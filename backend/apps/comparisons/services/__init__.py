@@ -12,19 +12,23 @@
 from apps.comparisons.services import (
     get_sentiment_service,
     get_timeline_service,
-    get_score_service
+    get_score_service,
+    get_llm_service
 )
 """
 
 from .sentiment_service import get_sentiment_service, SentimentService
 from .timeline_service import get_timeline_service, TimelineService
 from .score_service import get_score_service, ScoreService
+from .llm_service import get_llm_service, LLMService
 
 __all__ = [
     'get_sentiment_service',
     'get_timeline_service',
     'get_score_service',
+    'get_llm_service',
     'SentimentService',
     'TimelineService',
     'ScoreService'
+    'LLMService'
 ]
