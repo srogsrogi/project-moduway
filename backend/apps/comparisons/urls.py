@@ -22,7 +22,8 @@
 from django.urls import path
 from .views import (
     ComparisonAnalyzeView,
-    CourseAIReviewDetailView
+    CourseAIReviewDetailView,
+    CourseReviewSummaryView
 )
 
 app_name = 'comparisons'
@@ -41,4 +42,11 @@ urlpatterns = [
         CourseAIReviewDetailView.as_view(),
         name='course-ai-review-detail'
     ),
+
+    # 강좌 리뷰 요약 조회
+    path(
+        'courses/<int:course_id>/review-summary/',
+        CourseReviewSummaryView.as_view(),
+        name='course-review-summary'
+    ), 
 ]
