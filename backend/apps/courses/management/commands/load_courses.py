@@ -1,9 +1,13 @@
 import csv
 import os
+import sys
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from apps.courses.models import Course
+
+# CSV 필드 크기 제한 해제 (raw_summary 등 긴 텍스트 처리용)
+csv.field_size_limit(sys.maxsize)
 
 class Command(BaseCommand):
     help = 'Import KMOOC courses from CSV file'
@@ -55,6 +59,7 @@ class Command(BaseCommand):
                         'classfy_name': row.get('classfy_name'),
                         'middle_classfy_name': row.get('middle_classfy_name'),
                         'summary': row.get('summary'),
+                        'raw_summary': row.get('raw_summary'), # 추가됨
                         'url': row.get('url'),
                         'course_image': row.get('course_image'),
                         'enrollment_start': parse_date(row.get('enrollment_start')),
@@ -65,16 +70,20 @@ class Command(BaseCommand):
                         'course_playtime': parse_float(row.get('course_playtime')),
                     }
 
-                    # update_or_create: kmooc_id가 있으면 업데이트, 없으면 생성
-                    obj, created = Course.objects.update_or_create(
-                        kmooc_id=row['id'],
-                        defaults=course_data
-                    )
+                    # kmooc_id로 기존 객체 확인
+                    kmooc_id = row['id']
+                    course = Course.objects.filter(kmooc_id=kmooc_id).first()
 
-                    if created:
-                        created_count += 1
+                    if course:
+                        # 이미 존재하면 raw_summary가 비어있는 경우에만 업데이트
+                        if not course.raw_summary:
+                            course.raw_summary = row.get('raw_summary')
+                            course.save(update_fields=['raw_summary'])
+                            updated_count += 1
                     else:
-                        updated_count += 1
+                        # 없으면 새로 생성
+                        Course.objects.create(kmooc_id=kmooc_id, **course_data)
+                        created_count += 1
                     
                     count += 1
                     if count % 100 == 0:

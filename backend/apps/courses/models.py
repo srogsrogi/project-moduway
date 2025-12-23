@@ -17,9 +17,10 @@ class Course(models.Model):
     middle_classfy_name = models.CharField(max_length=100, blank=True, null=True) # 중분류
     
     # 상세 정보
-    summary = models.TextField(blank=True, null=True)  # 강좌 요약/소개
-    url = models.URLField(max_length=500, blank=True, null=True)  # 강좌 바로가기 URL
-    course_image = models.URLField(max_length=500, blank=True, null=True)  # 강좌 썸네일/이미지 URL
+    summary = models.TextField("강좌 요약/소개", blank=True, null=True)
+    raw_summary = models.TextField("강좌 소개(HTML 원본)", blank=True, null=True) # HTML 포함 원본
+    course_image = models.URLField("강좌 썸네일", max_length=500, blank=True, null=True)
+    url = models.URLField("강좌 URL", max_length=500, blank=True, null=True)
     
     # 일정 정보 (NULL 허용)
     enrollment_start = models.DateField(blank=True, null=True) # 수강신청 시작일

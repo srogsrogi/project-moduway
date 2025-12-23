@@ -115,6 +115,7 @@ class Command(BaseCommand):
                     'classfy_name': fields.get('classfy_name'),
                     'middle_classfy_name': fields.get('middle_classfy_name'),
                     'summary': fields.get('summary'),
+                    'raw_summary': fields.get('raw_summary'), # 추가됨
                     'url': fields.get('url'),
                     'course_image': fields.get('course_image'),
                     'enrollment_start': parse_date(fields.get('enrollment_start')),

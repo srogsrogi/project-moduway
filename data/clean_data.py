@@ -5,15 +5,16 @@ import os
 import numpy as np
 
 # --- 설정 ---
-INPUT_CSV = os.path.join("raw_data", "kmooc_courses.csv")
-OUTPUT_DIR = "cleaned_data"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_CSV = os.path.join(BASE_DIR, "raw_data", "kmooc_courses_final.csv")
+OUTPUT_DIR = os.path.join(BASE_DIR, "cleaned_data")
 OUTPUT_CSV = os.path.join(OUTPUT_DIR, "kmooc_courses_public.csv")
 OUTPUT_JSON = os.path.join(OUTPUT_DIR, "kmooc_courses_public.json")
 
 COLUMN_NAMES = [
     'id', 'shortname', 'name', 'url', 'course_image', 'org', 'org_name',
     'enrollment_start', 'enrollment_end', 'study_start', 'study_end',
-    'professor', 'public_yn', 'summary', 'classfy_name', 'middle_classfy_name',
+    'professor', 'public_yn', 'summary', 'raw_summary', 'classfy_name', 'middle_classfy_name',
     'week', 'course_playtime', 'detail_error_raw'
 ]
 

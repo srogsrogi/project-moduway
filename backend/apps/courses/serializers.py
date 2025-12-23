@@ -22,7 +22,7 @@ class CourseDetailSerializer(serializers.ModelSerializer):
         model = Course
         fields = [
             'id', 'kmooc_id', 'name', 'org_name', 'professor',
-            'classfy_name', 'middle_classfy_name', 'summary',
+            'classfy_name', 'middle_classfy_name', 'summary', 'raw_summary',
             'course_image', 'url', 'week', 'course_playtime',
             'certificate_yn', 'is_wished', 'rating', 'review_count',
             'enrollment_start', 'enrollment_end', 'study_start', 'study_end'
