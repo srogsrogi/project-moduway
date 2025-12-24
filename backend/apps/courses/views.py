@@ -11,6 +11,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
 from elasticsearch import Elasticsearch
+import requests
+import json
+import os
 
 from .models import Course, CourseReview
 from .serializers import CourseDetailSerializer, CourseReviewSerializer, CourseListSerializer
@@ -286,4 +289,107 @@ class CourseRecommendationView(APIView):
             print(f"❌ ES 추천 로직 에러: {e}")
             print(traceback.format_exc())
             # 에러 발생 시 500 대신 빈 리스트 반환하여 프론트엔드 에러 방지
+            return Response([], status=status.HTTP_200_OK)
+
+
+class CourseSemanticSearchView(APIView):
+    """
+    사용자 입력 쿼리를 임베딩하여 유사한 강좌를 검색하는 뷰
+    CourseRecommendationView와 로직이 유사하나 변경 가능성이 있어 완전 분리하여 설계함
+    """
+    permission_classes = [AllowAny]
+
+    def _get_embedding(self, text):
+        """내부용 임베딩 생성 메서드"""
+        GMS_URL = "https://gms.ssafy.io/gmsapi/api.openai.com/v1/embeddings"
+        GMS_KEY = os.environ.get("GMS_KEY")
+        
+        if not GMS_KEY:
+            print("❌ GMS_KEY가 설정되지 않았습니다.")
+            return None
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GMS_KEY}"
+        }
+
+        clean_text = text.replace('\n', ' ').replace('\r', ' ').strip()
+        if not clean_text:
+            return None
+
+        data = {
+            "model": "text-embedding-3-small",
+            "input": clean_text
+        }
+        
+        try:
+            response = requests.post(GMS_URL, headers=headers, data=json.dumps(data), timeout=5)
+            if response.status_code == 200:
+                result = response.json()
+                return result['data'][0]['embedding']
+            else:
+                print(f"❌ 임베딩 API 호출 실패: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            print(f"❌ 임베딩 생성 중 에러 발생: {e}")
+            return None
+
+    def get(self, request):
+        query = request.query_params.get('query', '').strip()
+        if not query:
+            return Response([], status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. 검색어 임베딩 생성
+        query_vector = self._get_embedding(query)
+        if not query_vector:
+            # 임베딩 실패 시 빈 결과 반환
+            return Response([], status=status.HTTP_200_OK)
+
+        try:
+            # 2. ES 벡터 검색
+            res = ES_CLIENT.search(
+                index="kmooc_courses",
+                knn={
+                    "field": "embedding",
+                    "query_vector": query_vector,
+                    "k": 100, # 넉넉히 조회
+                    "num_candidates": 1000
+                },
+                source=["id"]
+            )
+            
+            hits = res.get("hits", {}).get("hits", [])
+            candidate_ids = [int(h["_source"]["id"]) for h in hits]
+
+            # 3. DB 조회 및 중복 필터링
+            courses_queryset = Course.objects.filter(id__in=candidate_ids)
+            course_data_map = {c.id: c for c in courses_queryset}
+
+            final_courses = []
+            seen_identity = set()
+
+            for c_id in candidate_ids:
+                course = course_data_map.get(c_id)
+                if not course:
+                    continue
+
+                curr_name = course.name.strip()
+                curr_professor = course.professor.strip()
+                identity = (curr_name, curr_professor)
+
+                if identity not in seen_identity:
+                    final_courses.append(course)
+                    seen_identity.add(identity)
+
+                # 검색 결과는 조금 더 많이 보여줘도 됨 (예: 10개)
+                if len(final_courses) >= 20:
+                    break
+
+            serializer = SimpleCourseSerializer(final_courses, many=True)
+            return Response(serializer.data)
+
+        except Exception as e:
+            import traceback
+            print(f"❌ ES 검색 로직 에러: {e}")
+            print(traceback.format_exc())
             return Response([], status=status.HTTP_200_OK)

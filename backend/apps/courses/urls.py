@@ -3,7 +3,11 @@ from .views import (
     CourseDetailView, 
     CourseReviewListView, 
     CourseRecommendationView,
+<<<<<<< Updated upstream
     CourseListView
+=======
+    CourseSemanticSearchView
+>>>>>>> Stashed changes
 )
 
 # 개요
@@ -53,4 +57,7 @@ urlpatterns = [
     
     # 3. 추천 강의 조회: /api/v1/courses/<id>/recommendations/
     path('<int:course_id>/recommendations/', CourseRecommendationView.as_view(), name='course-recommendations'),
+
+    # 4. 의미 기반 검색: /api/v1/courses/search/semantic/?query=...
+    path('search/semantic/', CourseSemanticSearchView.as_view(), name='course-semantic-search'),
 ]

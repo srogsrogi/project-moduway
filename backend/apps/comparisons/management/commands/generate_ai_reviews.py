@@ -88,23 +88,27 @@ class Command(BaseCommand):
         - --delay: API rate limit 및 서버 부하 완화를 위해 호출 간 sleep 제어
         - --output: 결과를 CSV 파일로 저장할 파일명 (data/backups/ 하위에 생성)
         """
+        # 처리할 강좌 수를 제한
         parser.add_argument(
             '--limit',
             type=int,
             default=None,
             help='처리할 강좌 수 제한 (테스트용)'
         )
+        # 이미 AI 평가가 있어도 재생성할지 여부
         parser.add_argument(
             '--force',
             action='store_true',
             help='이미 평가가 있는 강좌도 재생성'
         )
+        # 특정 강좌만 평가(테스트/디버깅용)
         parser.add_argument(
             '--course-id',
             type=int,
             default=None,
             help='특정 강좌만 평가 (테스트용)'
         )
+        # API 호출 간 대기 시간
         parser.add_argument(
             '--delay',
             type=float,
@@ -137,6 +141,7 @@ class Command(BaseCommand):
         gms_url = "https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions"
         gms_key = os.environ.get("GMS_KEY")
 
+        # 키 없으면 즉시 중단
         if not gms_key:
             raise CommandError('GMS_KEY 환경변수가 설정되지 않았습니다.')
 
@@ -144,30 +149,38 @@ class Command(BaseCommand):
         # 2. 처리할 강좌 필터링
         # =============================================
         if options['course_id']:
+            # (A) 특정 강좌만
             courses = Course.objects.filter(id=options['course_id'])
             if not courses.exists():
                 raise CommandError(f"ID {options['course_id']} 강좌를 찾을 수 없습니다.")
         elif options['force']:
+            # (B) 모든 강좌 (재생성)
             courses = Course.objects.all()
         else:
+            # (C) AI 평가가 없는 강좌만
             courses = Course.objects.filter(ai_review__isnull=True)
 
+        # 제한 적용
         if options['limit']:
+            # QuerySet slicing -> DB 쿼리로 변환되어 효율적
             courses = courses[:options['limit']]
 
+        # slicing된 QuerySet의 개수 확인
         total_count = courses.count()
 
+        # 처리할 게 없다면 깔끔하게 종료
         if total_count == 0:
             self.stdout.write(self.style.SUCCESS('처리할 강좌가 없습니다.'))
             return
 
+        # 진행 시작 안내
         self.stdout.write(f'\n총 {total_count}개 강좌 처리 시작\n')
 
         # =============================================
         # 3. 통계 및 파일 설정 변수
         # =============================================
-        success_count = 0
-        error_count = 0
+        success_count = 0  # 성공적으로 저장까지 완료한 강좌 수
+        error_count = 0    # 처리 중 예외가 발생한 강의 수
         batch_results = []
 
         output_path = None
@@ -181,15 +194,17 @@ class Command(BaseCommand):
         # 4. 각 강좌 처리
         # =============================================
         for idx, course in enumerate(courses, 1):
+            # 진행률 출력 : 현재 몇 번째 / 몇 개 중에
             self.stdout.write(f'\n[{idx}/{total_count}] 처리 중: {course.name} (ID: {course.id})')
 
             try:
                 # LLM 호출하여 AI 평가 생성
                 ai_review_data = self._generate_ai_review(course, gms_url, gms_key)
 
-                # DB 저장
+                # DB 저장 (원자성 보장)
                 with transaction.atomic():
                     review_data = self._prepare_review_data(ai_review_data)
+                    # 메타데이터
                     review_data.update({
                         'model_version': MODEL_VERSION,
                         'prompt_version': PROMPT_VERSION
@@ -220,7 +235,7 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING(f'  💾 중간 저장 완료 ({success_count}개)'))
                     batch_results = []
 
-                # Rate Limiting
+                # Rate Limiting (API 부하 방지)
                 if idx < total_count:
                     time.sleep(options['delay'])
 

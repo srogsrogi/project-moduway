@@ -81,11 +81,13 @@
 <script setup>
 import { ref } from 'vue';
 import CourseCard from '@/components/common/CourseCard.vue';
+import { searchSemanticCourses } from '@/api/courses';
 
 const searchQuery = ref('');
 const selectedCategories = ref([]);
 const selectedStatuses = ref([]);
 const sortBy = ref('latest');
+const isLoading = ref(false);
 
 const categories = [
   '인문', '사회', '교육', '공학', '자연', '의약', '예체능', '융·복합', '기타'
@@ -93,67 +95,26 @@ const categories = [
 
 const statusOptions = ['접수중', '개강임박', '상시', '종료'];
 
-// Mock Data
-const courses = ref([
-  {
-    id: 1,
-    title: '파이썬을 활용한 빅데이터 분석 기초',
-    university: '서울대학교',
-    instructor: '김교수 외 1명',
-    period: '15주 과정',
-    status: '접수중',
-    badgeColor: 'var(--primary-dark)',
-  },
-  {
-    id: 2,
-    title: '인공지능의 윤리적 쟁점과 미래 사회',
-    university: 'KAIST',
-    instructor: '이박사',
-    period: '자율 수강',
-    status: '상시',
-    badgeColor: '#333',
-  },
-  {
-    id: 3,
-    title: '현대인을 위한 심리학 개론: 마음 챙김',
-    university: '고려대학교',
-    instructor: '박교수',
-    period: '8주 과정',
-    status: '마감임박',
-    badgeColor: 'var(--primary-dark)',
-  },
-  {
-    id: 4,
-    title: '누구나 쉽게 배우는 핀테크 입문',
-    university: 'K-MOOC 제휴',
-    instructor: '금융기관',
-    period: '6주 과정',
-    status: 'NEW',
-    badgeColor: 'var(--primary-dark)',
-  },
-  {
-    id: 5,
-    title: '디지털 마케팅의 이해와 실습',
-    university: '연세대학교',
-    instructor: '최교수',
-    period: '12주 과정',
-    status: '접수중',
-    badgeColor: 'var(--primary-dark)',
-  },
-  {
-    id: 6,
-    title: '생활 속의 통계학',
-    university: '부산대학교',
-    instructor: '정교수',
-    period: '10주 과정',
-    status: '상시',
-    badgeColor: '#333',
-  },
-]);
+// 초기에는 빈 배열 (검색 전)
+const courses = ref([]);
 
-const handleSearch = () => {
-  console.log('Search:', searchQuery.value);
-  // 추후 검색 API 연동
+const handleSearch = async () => {
+  const query = searchQuery.value.trim();
+  if (!query) {
+    alert("검색어를 입력해주세요.");
+    return;
+  }
+
+  isLoading.value = true;
+  try {
+    const { data } = await searchSemanticCourses(query);
+    courses.value = data;
+  } catch (error) {
+    console.error("검색 실패:", error);
+    alert("검색 중 오류가 발생했습니다.");
+  } finally {
+    isLoading.value = false;
+  }
 };
 </script>
 
