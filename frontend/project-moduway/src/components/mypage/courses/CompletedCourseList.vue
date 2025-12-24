@@ -5,10 +5,10 @@
         v-for="enrollment in courses"
         :key="enrollment.id"
         :id="enrollment.course.id"
-        :title="enrollment.course.name"
-        :instructor="enrollment.course.professor"
-        :university="enrollment.course.org_name"
-        :thumbnail="enrollment.course.course_image"
+        :name="enrollment.course.name"
+        :professor="enrollment.course.professor"
+        :org_name="enrollment.course.org_name"
+        :course_image="enrollment.course.course_image"
         period=" "
       >
         <template #actions>
