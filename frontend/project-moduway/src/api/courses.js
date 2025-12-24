@@ -1,5 +1,10 @@
 import api from './index';
 
+// 강좌 목록 조회 (검색/필터/정렬/페이지네이션)
+export const getCourseList = (params = {}) => {
+  return api.get('/courses/', { params });
+};
+
 // 강좌 상세 조회
 export const getCourseDetail = (courseId) => {
   return api.get(`/courses/${courseId}/`);

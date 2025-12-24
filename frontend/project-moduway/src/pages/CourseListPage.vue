@@ -47,7 +47,7 @@
       <!-- 메인 컨텐츠 -->
       <main class="content">
         <div class="list-control">
-          <span class="total-count">총 <strong>{{ courses.length }}</strong>개의 강좌</span>
+          <span class="total-count">총 <strong>{{ totalCount }}</strong>개의 강좌</span>
           <div class="sort-options">
             <select v-model="sortBy">
               <option value="latest">최신순</option>
@@ -57,13 +57,23 @@
           </div>
         </div>
 
+        <!-- 로딩 상태 -->
+        <div v-if="isLoading" class="loading-state">
+          <p>강좌 목록을 불러오는 중...</p>
+        </div>
+
         <!-- 강좌 리스트 -->
-        <div class="course-grid">
+        <div v-else-if="courses.length > 0" class="course-grid">
           <CourseCard
             v-for="course in courses"
             :key="course.id"
             v-bind="course"
           />
+        </div>
+
+        <!-- 빈 상태 -->
+        <div v-else class="empty-state">
+          <p>강좌가 없습니다.</p>
         </div>
 
         <!-- 페이지네이션 (Mock) -->
@@ -79,9 +89,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import CourseCard from '@/components/common/CourseCard.vue';
-import { searchSemanticCourses } from '@/api/courses';
+import { getCourseList, searchSemanticCourses } from '@/api/courses';
 
 const searchQuery = ref('');
 const selectedCategories = ref([]);
@@ -95,8 +105,33 @@ const categories = [
 
 const statusOptions = ['접수중', '개강임박', '상시', '종료'];
 
-// 초기에는 빈 배열 (검색 전)
+// 강좌 목록 및 총 개수
 const courses = ref([]);
+const totalCount = ref(0);
+
+// 초기 로딩: 평점 높은 순으로 인기 강좌 표시
+const loadInitialCourses = async () => {
+  isLoading.value = true;
+  try {
+    const { data } = await getCourseList({
+      ordering: '-average_rating',  // 평점 높은 순 (기본값)
+      page_size: 6  // 한 페이지에 6개씩 (성능 개선)
+    });
+
+    courses.value = data.results || [];
+    totalCount.value = data.count || 0;
+  } catch (error) {
+    console.error("강좌 목록 로딩 실패:", error);
+    alert("강좌 목록을 불러오는 중 오류가 발생했습니다.");
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// 컴포넌트 마운트 시 초기 데이터 로드
+onMounted(() => {
+  loadInitialCourses();
+});
 
 const handleSearch = async () => {
   const query = searchQuery.value.trim();
@@ -146,6 +181,22 @@ const handleSearch = async () => {
 .sort-options select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; outline: none; font-size: 14px; cursor: pointer; }
 
 .course-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
+
+/* Loading & Empty State */
+.loading-state, .empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-sub);
+  font-size: 16px;
+}
+
+.loading-state p::before {
+  content: '⏳ ';
+}
+
+.empty-state p::before {
+  content: '📭 ';
+}
 
 /* Responsive Grid */
 @media (max-width: 1024px) {
