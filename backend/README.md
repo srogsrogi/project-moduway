@@ -7,6 +7,7 @@ Django REST Framework 기반의 백엔드 서버입니다.
 ```
 backend/
 ├── apps/                 # Django 앱 디렉토리
+|   ├── core/             # 공통 기능
 │   ├── accounts/         # 사용자 인증 및 계정 관리
 │   ├── community/        # 커뮤니티 기능
 │   ├── comparisons/      # AI강좌 비교분석 기능
