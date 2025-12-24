@@ -20,7 +20,7 @@ export const getRecommendedCourses = (courseId) => {
   return api.get(`/courses/${courseId}/recommendations/`);
 };
 
-// 의미 기반 강좌 검색
-export const searchSemanticCourses = (query) => {
-  return api.get(`/courses/search/semantic/`, { params: { query } });
+// 의미 기반 강좌 검색 (필터 파라미터 지원)
+export const searchSemanticCourses = (params = {}) => {
+  return api.get(`/courses/search/semantic/`, { params });
 };

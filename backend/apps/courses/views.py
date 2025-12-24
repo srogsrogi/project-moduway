@@ -152,20 +152,34 @@ class CourseListView(generics.ListAPIView):
 
         # 4. Filter
         # - 특정 필드 기반 필터링(카테고리/기관/교수 등)을 파라미터로 받아 적용한다.
-        filter_mappings = {
-            'classfy_name': 'classfy_name',                     # 대분류는 정확 일치 검색
-            'middle_classfy_name': 'middle_classfy_name',       # 중분류도 정확 일치 검색
-            'org_name': 'org_name__icontains',                  # 기관명은 부분 일치 검색(사용자 입력 편의)
-            'professor': 'professor__icontains',                # 교수명도 부분 일치 검색(사용자 입력 편의)
-        }
-        
+
         filters = Q()
-        # 각 필터 파라미터가 존재하면 Q 객체에 조건 추가
-        for param, field_lookup in filter_mappings.items():
-            value = self.request.query_params.get(param)
-            if value: # 빈 값이면 무시
-                filters &= Q(**{field_lookup: value}) # AND로 누적(모든 필터를 동시에 만족)
-        
+
+        # 대분류 필터 (단일 값)
+        classfy_name = self.request.query_params.get('classfy_name')
+        if classfy_name:
+            filters &= Q(classfy_name=classfy_name)
+
+        # 중분류 필터 (다중 값 지원)
+        # ?middle_classfy_name=컴퓨터·통신&middle_classfy_name=전기·전자 형태로 받음
+        middle_classfy_names = self.request.query_params.getlist('middle_classfy_name')
+        if middle_classfy_names:
+            # OR 조건으로 처리 (하나라도 일치하면 포함)
+            middle_filter = Q()
+            for name in middle_classfy_names:
+                middle_filter |= Q(middle_classfy_name=name)
+            filters &= middle_filter
+
+        # 운영기관 필터 (부분 일치)
+        org_name = self.request.query_params.get('org_name')
+        if org_name:
+            filters &= Q(org_name__icontains=org_name)
+
+        # 교수명 필터 (부분 일치)
+        professor = self.request.query_params.get('professor')
+        if professor:
+            filters &= Q(professor__icontains=professor)
+
         queryset = queryset.filter(filters) # 누적된 필터는 한 번에 적용
 
         # 5. Ordering
@@ -303,7 +317,7 @@ class CourseSemanticSearchView(APIView):
         """내부용 임베딩 생성 메서드"""
         GMS_URL = "https://gms.ssafy.io/gmsapi/api.openai.com/v1/embeddings"
         GMS_KEY = os.environ.get("GMS_KEY")
-        
+
         if not GMS_KEY:
             print("❌ GMS_KEY가 설정되지 않았습니다.")
             return None
@@ -321,7 +335,7 @@ class CourseSemanticSearchView(APIView):
             "model": "text-embedding-3-small",
             "input": clean_text
         }
-        
+
         try:
             response = requests.post(GMS_URL, headers=headers, data=json.dumps(data), timeout=5)
             if response.status_code == 200:
@@ -333,6 +347,35 @@ class CourseSemanticSearchView(APIView):
         except Exception as e:
             print(f"❌ 임베딩 생성 중 에러 발생: {e}")
             return None
+
+    def _apply_filters(self, queryset):
+        """필터링 로직 (CourseListView와 동일)"""
+        filters = Q()
+
+        # 대분류 필터 (단일 값)
+        classfy_name = self.request.query_params.get('classfy_name')
+        if classfy_name:
+            filters &= Q(classfy_name=classfy_name)
+
+        # 중분류 필터 (다중 값 지원)
+        middle_classfy_names = self.request.query_params.getlist('middle_classfy_name')
+        if middle_classfy_names:
+            middle_filter = Q()
+            for name in middle_classfy_names:
+                middle_filter |= Q(middle_classfy_name=name)
+            filters &= middle_filter
+
+        # 운영기관 필터 (부분 일치)
+        org_name = self.request.query_params.get('org_name')
+        if org_name:
+            filters &= Q(org_name__icontains=org_name)
+
+        # 교수명 필터 (부분 일치)
+        professor = self.request.query_params.get('professor')
+        if professor:
+            filters &= Q(professor__icontains=professor)
+
+        return queryset.filter(filters)
 
     def get(self, request):
         query = request.query_params.get('query', '').strip()
@@ -357,14 +400,16 @@ class CourseSemanticSearchView(APIView):
                 },
                 source=["id"]
             )
-            
+
             hits = res.get("hits", {}).get("hits", [])
             candidate_ids = [int(h["_source"]["id"]) for h in hits]
 
-            # 3. DB 조회 및 중복 필터링
+            # 3. DB 조회 및 필터 적용
             courses_queryset = Course.objects.filter(id__in=candidate_ids)
+            courses_queryset = self._apply_filters(courses_queryset)  # 필터 적용
             course_data_map = {c.id: c for c in courses_queryset}
 
+            # 4. 중복 필터링 (ES 순서 유지)
             final_courses = []
             seen_identity = set()
 
@@ -381,7 +426,7 @@ class CourseSemanticSearchView(APIView):
                     final_courses.append(course)
                     seen_identity.add(identity)
 
-                # 검색 결과는 조금 더 많이 보여줘도 됨 (예: 10개)
+                # 검색 결과는 조금 더 많이 보여줘도 됨 (예: 20개)
                 if len(final_courses) >= 20:
                     break
 
