@@ -164,6 +164,40 @@ const formattedPlaytime = computed(() => {
   return `${minutes}분`;
 });
 
+// 수강신청 버튼 (외부 링크 이동)
+const handleEnroll = () => {
+  if (course.value && course.value.url) {
+    window.open(course.value.url, '_blank');
+  } else {
+    alert('수강신청 링크가 없습니다.');
+  }
+};
+
+// 찜하기 토글
+const handleWishlistToggle = async () => {
+  if (!course.value) return;
+
+  try {
+    if (course.value.is_wished) {
+      await removeWishlist(course.value.id);
+      course.value.is_wished = false;
+    } else {
+      await addWishlist(course.value.id);
+      course.value.is_wished = true;
+    }
+  } catch (error) {
+    console.error('찜하기 실패:', error);
+    // 401 Unauthorized 에러 처리 (로그인 필요)
+    if (error.response && error.response.status === 401) {
+      if (confirm('로그인이 필요한 기능입니다. 로그인 페이지로 이동할까요?')) {
+        router.push(`/login?redirect=${route.fullPath}`);
+      }
+    } else {
+      alert('찜하기 처리에 실패했습니다.');
+    }
+  }
+};
+
 const fetchData = async (courseId) => {
   if (!courseId) return;
   try {
@@ -190,7 +224,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 컨테이너 및 기본 레이아웃 (기존과 동일) */
+/* 컨테이너 및 기본 레이아웃 */
 .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
 .layout-container { display: grid; grid-template-columns: 1fr 350px; gap: 40px; margin: 40px auto 80px; }
 
@@ -204,18 +238,64 @@ onMounted(() => {
 
 .summary-iframe {
   width: 100%;
-  min-height: 400px; /* 초기 최소 높이 */
+  min-height: 400px;
   border: none;
   display: block;
   transition: height 0.2s ease;
 }
 
-/* 히어로 섹션 및 기타 버튼 스타일 (기존 유지) */
+/* 히어로 섹션 */
 .course-hero { background-color: #f9fafb; padding: 60px 0; border-bottom: 1px solid #e5e7eb; }
 .hero-content { display: flex; justify-content: space-between; align-items: center; gap: 40px; }
 .course-title { font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 20px; }
 .rating-badge { background: #fef3c7; color: #d97706; padding: 4px 12px; border-radius: 20px; font-weight: 700; }
 .hero-image img { width: 480px; height: 270px; object-fit: cover; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+
+/* 액션 버튼 스타일 */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.btn-enroll { 
+  background: #2563eb; 
+  color: white; 
+  padding: 14px 28px; 
+  border-radius: 8px; 
+  font-weight: 700; 
+  border: none; 
+  cursor: pointer; 
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+.btn-enroll:hover { background: #1d4ed8; }
+
+.btn-wishlist {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+.btn-wishlist:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+.btn-wishlist.active {
+  border-color: #e11d48;
+  color: #e11d48;
+  background: #fff1f2;
+}
+
+/* 네비게이션 및 기타 */
 .content-nav { display: flex; gap: 30px; border-bottom: 2px solid #f3f4f6; margin-bottom: 30px; }
 .content-nav a { padding: 15px 5px; text-decoration: none; color: #6b7280; font-weight: 600; border-bottom: 2px solid transparent; cursor: pointer; }
 .content-nav a.active { color: #2563eb; border-bottom-color: #2563eb; }
@@ -223,6 +303,14 @@ onMounted(() => {
 .info-list { list-style: none; padding: 0; }
 .info-list li { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 0.95rem; }
 .divider { height: 1px; background: #e5e7eb; margin: 15px 0; list-style: none; }
-.btn-enroll { background: #2563eb; color: white; padding: 14px 28px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; }
+.btn-external { display: block; width: 100%; text-align: center; padding: 12px; background: #f3f4f6; color: #4b5563; text-decoration: none; border-radius: 8px; font-weight: 600; margin-top: 20px; }
+.btn-external:hover { background: #e5e7eb; }
 .course-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 30px; }
+
+/* 반응형 */
+@media (max-width: 1024px) {
+  .hero-content { flex-direction: column-reverse; align-items: stretch; }
+  .hero-image img { width: 100%; height: auto; }
+  .layout-container { grid-template-columns: 1fr; }
+}
 </style>
