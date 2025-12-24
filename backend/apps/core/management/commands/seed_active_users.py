@@ -109,8 +109,8 @@ SEED_CONFIG = {
     },
     'COURSE': {
         'ENROLLMENT': {
-            'RATE_MIN': 0.0003,                                     # 유저당 최소 수강 강좌 비율 (전체 강좌 대비)
-            'RATE_MAX': 0.006,                                      # 유저당 최대 수강 강좌 비율
+            'RATE_MIN': 0.003,                                     # 유저당 최소 수강 강좌 비율 (전체 강좌 대비)
+            'RATE_MAX': 0.06,                                      # 유저당 최대 수강 강좌 비율
             'STATUS_OPTS': ['enrolled', 'completed', 'dropped'],    # 수강 상태 옵션
             'STATUS_WEIGHTS': [0.5, 0.4, 0.1],                      # 수강중, 완강, 드랍 비율
             'PROGRESS': {
@@ -124,7 +124,7 @@ SEED_CONFIG = {
             'RATE_MAX': 0.45,            # 유저당 최대 위시리스트 강좌 비율
         },
         'REVIEW': {
-            'WRITE_RATE': 0.6,                                        # 완강자 중 리뷰 작성 비율
+            'WRITE_RATE': 1,                                        # 완강자 중 리뷰 작성 비율
             'LONG_TEXT_RATE': 0.8,                                    # 긴 리뷰 작성 확률
             'LONG_TEXT_PARAGRAPHS': (1,4),             # 긴 리뷰 단락 수
             'SHORT_TEXT_WORDS': (5, 20),                # 짧은 리뷰 단어 수
@@ -175,6 +175,10 @@ class Command(BaseCommand):
                 self.style.ERROR('에러 : 이 명령어는 DEBUG(로컬) 모드에서만 실행할 수 있습니다!')
             )
             return
+
+        # 현재 시각 고정 (안전 마진 1초 포함)
+        # timezone.now()를 여러 번 호출하면 시간차로 인한 에러 방지
+        self.current_time = timezone.now() - timedelta(seconds=1)
 
         # 옵션 파싱
         num_users = min(options['users'], MAX_USERS)
@@ -301,7 +305,7 @@ class Command(BaseCommand):
         existing_usernames = set(User.objects.values_list('username', flat=True))
         existing_emails = set(User.objects.values_list('email', flat=True))
 
-        base_date = timezone.now() - timedelta(days=USER_JOIN_LOOKBACK_DAYS)
+        base_date = self.current_time - timedelta(days=USER_JOIN_LOOKBACK_DAYS)
         
         # [최적화] 비밀번호 해싱은 루프 밖에서 한 번만 수행
         hashed_password = make_password(DEFAULT_PASSWORD)
@@ -314,7 +318,7 @@ class Command(BaseCommand):
 
             date_joined = random_datetime_between(
                 base_date,
-                timezone.now() - timedelta(days=1)
+                self.current_time - timedelta(days=1)
             )
 
             # 마지막 로그인 (80% 확률로 활성 유저)
@@ -322,7 +326,7 @@ class Command(BaseCommand):
             if random.random() < SEED_CONFIG['USER']['LOGIN_RATE']:
                 last_login = random_datetime_between(
                     date_joined,
-                    timezone.now()
+                    self.current_time
                 )
 
             user = User(
@@ -374,7 +378,7 @@ class Command(BaseCommand):
         if unverified_users:
             sample_size = max(1, int(len(unverified_users) * SEED_CONFIG['USER']['VERIFY_SAMPLE_RATE']))
             for user in random.sample(unverified_users, k=sample_size):
-                created_at = timezone.now() - timedelta(days=random.randint(0, EMAIL_VERIFY_LOOKBACK_DAYS_MAX))
+                created_at = self.current_time - timedelta(days=random.randint(0, EMAIL_VERIFY_LOOKBACK_DAYS_MAX))
                 verification = EmailVerification(
                     email=user.email,
                     code_hash=fake.sha256(),
@@ -403,7 +407,7 @@ class Command(BaseCommand):
 
         self.stdout.write('게시판 생성 중...')
         boards = []
-        service_start = timezone.now() - timedelta(days=BOARD_SERVICE_LOOKBACK_DAYS)
+        service_start = self.current_time - timedelta(days=BOARD_SERVICE_LOOKBACK_DAYS)
 
         for board_info in BOARD_DATA:
             board = Board(
@@ -427,7 +431,7 @@ class Command(BaseCommand):
 
         posts = []
         active_users = [u for u in users if u.is_active]
-        base_date = timezone.now() - timedelta(days=POST_ACTIVITY_LOOKBACK_DAYS)
+        base_date = self.current_time - timedelta(days=POST_ACTIVITY_LOOKBACK_DAYS)
 
         for user in active_users:
             # 정규분포로 게시글 수 결정 (일부는 많이, 일부는 적게)
@@ -441,16 +445,20 @@ class Command(BaseCommand):
             for _ in range(num_posts):
                 created_at = random_datetime_between(
                     max(base_date, user.date_joined),
-                    timezone.now()
+                    self.current_time
                 )
 
-                # 30% 확률
+                # 30% 확률로 게시글 수정
                 updated_at = created_at
                 if random.random() < SEED_CONFIG['COMMUNITY']['POST_UPDATE_RATE']:
-                    updated_at = random_datetime_between(
-                        created_at,
-                        timezone.now()
-                    )
+                    # 방어: created_at이 current_time과 같거나 이후면 그대로 사용
+                    if created_at >= self.current_time:
+                        updated_at = created_at
+                    else:
+                        updated_at = random_datetime_between(
+                            created_at,
+                            self.current_time
+                        )
 
                 post = Post(
                     author=user,
@@ -480,14 +488,22 @@ class Command(BaseCommand):
             post_comments = []
 
             for _ in range(num_comments):
-                created_at = random_datetime_between(
-                    post.created_at,
-                    timezone.now()
-                )
+                # 방어: post.created_at이 current_time과 같거나 이후면 그대로 사용
+                if post.created_at >= self.current_time:
+                    created_at = post.created_at
+                else:
+                    created_at = random_datetime_between(
+                        post.created_at,
+                        self.current_time
+                    )
 
                 updated_at = created_at
                 if random.random() < SEED_CONFIG['COMMUNITY']['COMMENT']['UPDATE_RATE']:  # 15%
-                    updated_at = random_datetime_between(created_at, timezone.now())
+                    # 방어: created_at이 current_time과 같거나 이후면 그대로 사용
+                    if created_at >= self.current_time:
+                        updated_at = created_at
+                    else:
+                        updated_at = random_datetime_between(created_at, self.current_time)
 
                 comment = Comment(
                     author=random.choice(users),
@@ -514,10 +530,14 @@ class Command(BaseCommand):
                 # 각 댓글에 1~3개 대댓글
                 num_replies = random.randint(*SEED_CONFIG['COMMUNITY']['REPLY']['COUNT_RANGE'])
                 for _ in range(num_replies):
-                    created_at = random_datetime_between(
-                        comment.created_at,
-                        timezone.now()
-                    )
+                    # 방어: comment.created_at이 current_time과 같거나 이후면 그대로 사용
+                    if comment.created_at >= self.current_time:
+                        created_at = comment.created_at
+                    else:
+                        created_at = random_datetime_between(
+                            comment.created_at,
+                            self.current_time
+                        )
 
                     reply = Comment(
                         author=random.choice(users),
@@ -553,13 +573,19 @@ class Command(BaseCommand):
                 pair = (user.id, post.id)
                 if pair not in seen:
                     seen.add(pair)
+                    # 방어: post.created_at이 current_time과 같거나 이후면 그대로 사용
+                    if post.created_at >= self.current_time:
+                        like_created_at = post.created_at
+                    else:
+                        like_created_at = random_datetime_between(
+                            post.created_at,
+                            self.current_time
+                        )
+
                     like = PostLike(
                         user=user,
                         post=post,
-                        created_at=random_datetime_between(
-                            post.created_at,
-                            timezone.now()
-                        )
+                        created_at=like_created_at
                     )
                     likes.append(like)
 
@@ -584,13 +610,19 @@ class Command(BaseCommand):
                     pair = (user.id, post.id)
                     if pair not in seen:
                         seen.add(pair)
+                        # 방어: post.created_at이 current_time과 같거나 이후면 그대로 사용
+                        if post.created_at >= self.current_time:
+                            scrap_created_at = post.created_at
+                        else:
+                            scrap_created_at = random_datetime_between(
+                                post.created_at,
+                                self.current_time
+                            )
+
                         scrap = Scrap(
                             user=user,
                             post=post,
-                            created_at=random_datetime_between(
-                                post.created_at,
-                                timezone.now()
-                            )
+                            created_at=scrap_created_at
                         )
                         scraps.append(scrap)
 
@@ -618,15 +650,15 @@ class Command(BaseCommand):
                     seen.add(pair)
 
                     # 수강 시작일
-                    if course.enrollment_start and course.enrollment_start <= timezone.now().date():
+                    if course.enrollment_start and course.enrollment_start <= self.current_time.date():
                         enrolled_at = random_datetime_between(
                             timezone.make_aware(datetime.combine(course.enrollment_start, datetime.min.time())),
-                            timezone.now()
+                            self.current_time
                         )
                     else:
                         enrolled_at = random_datetime_between(
                             user.date_joined,
-                            timezone.now()
+                            self.current_time
                         )
 
                     # 상태 (enrolled: 50%, completed: 40%, dropped: 10%)
@@ -646,10 +678,14 @@ class Command(BaseCommand):
                     # 마지막 학습일
                     last_studied = None
                     if status == 'enrolled':
-                        last_studied = random_datetime_between(
-                            enrolled_at,
-                            timezone.now()
-                        )
+                        # 방어: enrolled_at이 current_time과 같거나 이후면 그대로 사용
+                        if enrolled_at >= self.current_time:
+                            last_studied = enrolled_at
+                        else:
+                            last_studied = random_datetime_between(
+                                enrolled_at,
+                                self.current_time
+                            )
                     elif status == 'completed':
                         last_studied = enrolled_at + timedelta(days=random.randint(30, 120))
 
@@ -661,7 +697,7 @@ class Command(BaseCommand):
                         last_studied_at=last_studied,
                         enrolled_at=enrolled_at,
                         created_at=enrolled_at,
-                        updated_at=timezone.now(),
+                        updated_at=self.current_time,
                     )
                     enrollments.append(enrollment)
 
@@ -701,13 +737,19 @@ class Command(BaseCommand):
                     pair = (user.id, course.id)
                     if pair not in seen:
                         seen.add(pair)
+                        # 방어: user.date_joined이 current_time과 같거나 이후면 그대로 사용
+                        if user.date_joined >= self.current_time:
+                            wishlist_created_at = user.date_joined
+                        else:
+                            wishlist_created_at = random_datetime_between(
+                                user.date_joined,
+                                self.current_time
+                            )
+
                         wishlist = Wishlist(
                             user=user,
                             course=course,
-                            created_at=random_datetime_between(
-                                user.date_joined,
-                                timezone.now()
-                            )
+                            created_at=wishlist_created_at
                         )
                         wishlists.append(wishlist)
 
@@ -734,10 +776,21 @@ class Command(BaseCommand):
                 else:
                     review_text = fake.sentence(nb_words=random.randint(*SEED_CONFIG['COURSE']['REVIEW']['SHORT_TEXT_WORDS']))
 
-                created_at = random_datetime_between(
-                    enrollment.enrolled_at + timedelta(days=SEED_CONFIG['COURSE']['REVIEW']['MIN_DAYS_AFTER_ENROLL']),
-                    timezone.now()
-                )
+                # 리뷰 작성일 (수강 시작 + 20일 이후)
+                review_start_date = enrollment.enrolled_at + timedelta(days=SEED_CONFIG['COURSE']['REVIEW']['MIN_DAYS_AFTER_ENROLL'])
+
+                # 리뷰 시작일이 미래인 경우 방어 처리
+                if review_start_date >= self.current_time:
+                    # 수강 시작일 이후 ~ 현재 시각 사이로 설정
+                    created_at = random_datetime_between(
+                        enrollment.enrolled_at,
+                        self.current_time
+                    )
+                else:
+                    created_at = random_datetime_between(
+                        review_start_date,
+                        self.current_time
+                    )
 
                 review = CourseReview(
                     user=enrollment.user,

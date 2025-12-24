@@ -67,7 +67,7 @@ services:
       sh -c "python manage.py makemigrations && 
              psql postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@db:5432/$${POSTGRES_DB} -c 'CREATE EXTENSION IF NOT EXISTS vector;' &&
              python manage.py migrate && 
-             gunicorn --bind 0.0.0.0:8000 config.wsgi:application"
+             gunicorn --bind 0.0.0.0:8000 --timeout 600 config.wsgi:application"
 
   # Frontend (Vue.js + Nginx)
   frontend:
