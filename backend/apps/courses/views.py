@@ -133,21 +133,18 @@ class CourseListView(generics.ListAPIView):
         # - "나의 ID"가 "내 그룹(이름+교수)의 최신 ID"와 일치하는 행만 남김
         queryset = queryset.filter(id=Subquery(latest_course_subquery))
         
-        # 3. Search (강좌명 OR 소개)
+        # 3. Search (강좌명만 검색)
         # ?search=" 파이썬  웹 " -> ['파이썬', '웹']
         search_query = self.request.query_params.get('search', '').strip()  # 공백 제거
-        
+
         if search_query: # 빈 문자열이면 건너뜀
             keywords = search_query.split() # 공백을 기준으로 토큰화
             search_filter = Q()  # 복합 조건을 처리하기 위한 Q 객체
-            
+
             for keyword in keywords:
-                # 각 키워드가 (이름 OR 요약)에 포함되어야 함 (AND 조건)
-                search_filter &= (
-                    Q(name__icontains=keyword) |        # 강좌명이 키워드를 포함(대소문자 무시)
-                    Q(summary__icontains=keyword)       # 강좌 요약이 키워드를 포함(대소문자 무시)
-                )
-            
+                # 각 키워드가 강좌명에 포함되어야 함 (AND 조건)
+                search_filter &= Q(name__icontains=keyword)  # 강좌명이 키워드를 포함(대소문자 무시)
+
             queryset = queryset.filter(search_filter)
 
         # 4. Filter

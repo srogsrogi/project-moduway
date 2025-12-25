@@ -33,6 +33,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# Cloudflare가 HTTPS로 받은 요청을 HTTP로 넘겨줄 때 보내는 헤더를 신뢰함(리다이렉션 루프 방지)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Application definition
 

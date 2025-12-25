@@ -68,6 +68,271 @@ BOARD_SERVICE_LOOKBACK_DAYS = 730
 EMAIL_VERIFY_LOOKBACK_DAYS_MAX = 7
 EMAIL_VERIFY_EXPIRE_HOURS = 24
 
+class RealisticReviewGenerator:
+    """
+    [개선된 버전] 문맥(Context)을 고려하여 말이 되는 조합만 생성하는 클래스
+    """
+
+    # 긍정/부정 비율 패턴 (긍정수, 부정수, 확률)
+    SENTIMENT_PATTERNS = [
+        (3, 0, 0.4),  # 완전 긍정 40%
+        (2, 1, 0.4),  # 대체로 긍정 40%
+        (1, 1, 0.15), # 중립 15%
+        (1, 2, 0.05), # 부정 5%
+    ]
+
+    # =========================================================================
+    # 1. 서론 & 결론 (얘네는 범용적이라 섞어도 됨)
+    # =========================================================================
+    intro_times = [
+        "최근에", "예전부터", "이번 달에", "급하게", "여유가 생겨서",
+        "주말을 이용해서", "퇴근하고 틈틈이", "방학 기간 동안", "프로젝트 시작 전에", "이직 준비 기간에"
+    ]
+    intro_motivations = [
+        "부족한 기초를 채우고 싶어서", "실무 스킬업이 필요해서", "지인의 강력한 추천으로",
+        "커리큘럼이 너무 마음에 들어서", "유튜브로 독학하다 한계를 느껴서", "새로운 분야에 도전해보고 싶어서",
+        "회사 업무에 바로 적용해야 해서", "코딩 테스트 대비를 위해", "포트폴리오 퀄리티를 높이려고",
+        "유명한 강사님이라 믿고", "기존 지식을 정리하고 싶어서", "가장 리뷰가 좋길래",
+        "할인 이벤트를 하길래", "팀원들과 스터디하려고", "기본기가 흔들리는 것 같아서"
+    ]
+    intro_actions = [
+        "수강을 시작했습니다.", "결제하게 되었습니다.", "듣게 되었네요.", "신청했습니다.",
+        "선택했는데 후회 없습니다.", "시작해 보았습니다.", "정주행을 시작했습니다.",
+        "큰 맘 먹고 질렀습니다.", "수강신청 버튼을 눌렀습니다.", "학습을 시작했습니다."
+    ]
+
+    outros = [
+        "전반적으로 만족스러운 강의였고 다른 분들께도 추천하고 싶습니다.", "가격 대비 퀄리티가 훌륭해서 돈이 아깝지 않은 선택이었습니다.",
+        "이 분야에 입문하고 싶은 분들이라면 이 강의만 들어도 충분해요.", "완강하고 나니 큰 그림이 그려지네요. 정말 감사합니다!",
+        "고민하고 계신 분들이 있다면 주저 말고 수강하시길 추천드립니다.", "앞으로 나올 강사님의 다음 시리즈 강의도 기대가 되네요.",
+        "제 인생 강의 중 하나로 꼽고 싶을 만큼 유익한 시간이었습니다.", "꾸준히 반복해서 들으면 실력 향상에 큰 도움이 될 것 같아요.",
+        "실무 역량을 키우고 싶은 주니어들에게 강력하게 추천하는 바입니다.", "기초를 다지기에 이보다 더 좋은 강의는 없을 것 같네요."
+    ]
+
+    # =========================================================================
+    # 2. 본론 (카테고리별 분리 - 핵심 로직)
+    # 같은 키(key) 안에 있는 주어와 서술어끼리만 만남
+    # =========================================================================
+    context_data = {
+        # [그룹 A] 전달력/강사 스타일 (목소리, 발음, 속도 등)
+        'delivery': {
+            'subjects': [
+                "강사님의 목소리 톤이", "전반적인 딕션이", "설명하는 속도가", "강의 전달력이",
+                "말씀하시는 스타일이", "귀에 꽂히는 발성이"
+            ],
+            'modifiers': [
+                "정말", "기대 이상으로", "생각보다 훨씬", "무엇보다", "압도적으로",
+                "놀라울 정도로", "확실히", "특히", "솔직히 말해서", "누가 들어도 편안할 만큼"
+            ],
+            'predicates': [
+                "귀에 쏙쏙 박힙니다.", "듣기 편안합니다.", "졸리지 않게 해줍니다.",
+                "집중력을 잃지 않게 도와줍니다.", "배속으로 들어도 명확합니다.", "아나운서 같습니다."
+            ],
+            # 부정문 (단점) - 3배 확장
+            'neg_subjects': [
+                "다만 말의 속도가", "가끔 발음이", "목소리 크기가", "마이크 상태가",
+                "억양이", "호흡이", "말투가", "강세 패턴이",
+                "설명 템포가", "쉬는 타이밍이", "음색이", "톤 변화가"
+            ],
+            'neg_predicates': [
+                "조금 빠른 감이 있습니다.", "약간 작게 들릴 때가 있습니다.", "가끔 뭉개지는 구간이 있습니다.",
+                "단조로운 편입니다.", "어색할 때가 있습니다.", "불규칙합니다.",
+                "다소 어눌하게 느껴집니다.", "집중하기 어려울 수 있습니다.", "개선의 여지가 있습니다."
+            ]
+        },
+
+        # [그룹 B] 자료/시각적 요소 (PPT, 코드, 화질)
+        'material': {
+            'subjects': [
+                "강의 자료 퀄리티가", "제공되는 PPT가", "실습 예제 코드가", "화면 구성이",
+                "자막과 스크립트가", "영상 화질이", "판서 내용이"
+            ],
+            'modifiers': [
+                "정말", "매우", "상당히", "깔끔하고", "체계적이고",
+                "가독성 좋게", "보기 편하게", "세심하게"
+            ],
+            'predicates': [
+                "가독성이 좋습니다.", "복습하기에 최적입니다.", "정리가 잘 되어 있습니다.",
+                "군더더기 없이 깔끔합니다.", "눈에 확 들어옵니다.", "따라 치기 편합니다."
+            ],
+            # 부정문 (단점) - 3배 확장
+            'neg_subjects': [
+                "교안의 일부 오타가", "화면 글씨 크기가", "코드 해상도가", "자료 다운로드 속도가",
+                "PPT 디자인이", "예제 파일 구성이", "자막 싱크가", "색상 대비가",
+                "도표 가독성이", "파일 용량이", "레이아웃이", "첨부 자료 정리가"
+            ],
+            'neg_predicates': [
+                "조금 거슬릴 수 있습니다.", "모바일에서는 작게 보입니다.", "수정이 필요해 보입니다.",
+                "아쉬운 부분입니다.", "불편할 때가 있습니다.", "개선되면 좋겠습니다.",
+                "다소 부족한 감이 있습니다.", "보완이 필요합니다.", "만족스럽지 못했습니다."
+            ]
+        },
+
+        # [그룹 C] 내용/커리큘럼 (난이도, 깊이, 실무활용)
+        'content': {
+            'subjects': [
+                "전체적인 커리큘럼이", "이론과 실습 비율이", "실무 관련 꿀팁들이",
+                "챕터별 요약 정리가", "초반 빌드업 과정이", "다루는 내용의 깊이가"
+            ],
+            'modifiers': [
+                "알차고", "탄탄하고", "빈틈없고", "실용적이고",
+                "체계적이고", "논리적이고", "단계별로"
+            ],
+            'predicates': [
+                "실무에 바로 쓸 수 있겠네요.", "돈이 전혀 아깝지 않습니다.", "이해하기 쉽게 구성되었습니다.",
+                "많은 통찰력을 줍니다.", "성취감을 느끼게 해줍니다.", "완벽에 가깝습니다."
+            ],
+            # 부정문 (단점) - 3배 확장
+            'neg_subjects': [
+                "초반 진도가", "후반부 난이도가", "실습 환경 세팅이", "설명의 깊이가",
+                "과제 난이도가", "예제 선택이", "커리큘럼 순서가", "실무 연계가",
+                "심화 내용이", "기초 설명이", "프로젝트 난이도가", "학습 분량이"
+            ],
+            'neg_predicates': [
+                "조금 가파르게 느껴집니다.", "초보자에겐 어려울 수 있습니다.", "다소 불친절하게 느껴졌습니다.",
+                "아쉬운 점이 있습니다.", "부족하다고 생각합니다.", "개선이 필요합니다.",
+                "어렵게 느껴질 수 있습니다.", "쉽지 않습니다.", "재고해볼 필요가 있습니다."
+            ]
+        }
+    }
+
+    @classmethod
+    def get_sentence_part(cls, category, type_key):
+        """특정 카테고리(delivery, material, content)의 요소(주어, 수식어, 서술어)를 랜덤 반환"""
+        return random.choice(cls.context_data[category][type_key])
+
+    @classmethod
+    def generate_review(cls):
+        # 1. 서론
+        intro = f"{random.choice(cls.intro_times)} {random.choice(cls.intro_motivations)} {random.choice(cls.intro_actions)}"
+
+        # 2. 긍정/부정 비율 선택 (weighted random)
+        patterns = cls.SENTIMENT_PATTERNS
+        total_weight = sum(p[2] for p in patterns)
+        rand_val = random.uniform(0, total_weight)
+
+        cumulative = 0
+        num_positive, num_negative = 2, 1  # 기본값
+        for pos, neg, weight in patterns:
+            cumulative += weight
+            if rand_val <= cumulative:
+                num_positive, num_negative = pos, neg
+                break
+
+        # 3. 본론 생성
+        categories = list(cls.context_data.keys())
+
+        # 긍정/부정 문장에서 사용할 카테고리 선택
+        total_sentences = num_positive + num_negative
+        picked_cats = random.sample(categories, min(total_sentences, len(categories)))
+        if len(picked_cats) < total_sentences:
+            # 카테고리가 부족하면 반복 사용
+            picked_cats.extend(random.choices(categories, k=total_sentences - len(picked_cats)))
+
+        # 긍정 문장 생성
+        positive_sentences = []
+        positive_cats = picked_cats[:num_positive]
+        for cat in positive_cats:
+            subj = cls.get_sentence_part(cat, 'subjects')
+            mod = cls.get_sentence_part(cat, 'modifiers')
+            pred = cls.get_sentence_part(cat, 'predicates')
+            positive_sentences.append(f"{subj} {mod} {pred}")
+
+        # 부정 문장 생성 (긍정에서 언급한 카테고리 중에서 선택 - 일관성 유지)
+        negative_sentences = []
+        if num_negative > 0:
+            # 긍정 카테고리가 있으면 그 중에서 선택, 없으면 전체에서 선택
+            neg_cats = positive_cats if positive_cats else categories
+            for _ in range(num_negative):
+                neg_cat = random.choice(neg_cats)
+                neg_subj = cls.get_sentence_part(neg_cat, 'neg_subjects')
+                neg_pred = cls.get_sentence_part(neg_cat, 'neg_predicates')
+                negative_sentences.append(f"{neg_subj} {neg_pred}")
+
+        # 4. 결론
+        outro = random.choice(cls.outros)
+
+        # 5. 합치기
+        all_sentences = positive_sentences + negative_sentences
+        body = " ".join(all_sentences)
+        full_review = f"{intro} {body} {outro}"
+
+        # 길이 보정
+        if len(full_review) < 100:
+             full_review += " 개인적으로 공부하면서 메모해둔 내용들이 실무에서 정말 큰 도움이 되고 있습니다."
+
+        return full_review
+
+class KoreanContentGenerator:
+    """한글 게시글/댓글 생성기"""
+
+    # 게시글 주제 템플릿
+    POST_TOPICS = [
+        "강의 추천", "질문", "후기", "스터디 모집", "정보 공유",
+        "취업 준비", "프로젝트 공유", "공부 방법", "진로 상담", "자료 요청"
+    ]
+
+    # 제목 템플릿
+    TITLE_TEMPLATES = [
+        "{topic} 관련해서 질문 있습니다",
+        "{topic} 어떻게 하시나요?",
+        "{topic} 도움 부탁드립니다",
+        "{topic} 경험 공유합니다",
+        "{topic} 궁금한 점 있어요",
+        "초보자 {topic} 질문드려요",
+        "{topic} 추천 부탁드립니다",
+        "{topic}에 대한 의견 나눠요",
+        "{topic} 시작하려는데 조언 구합니다",
+        "{topic} 같이 하실 분 계신가요?",
+    ]
+
+    # 본문 문장 풀
+    CONTENT_SENTENCES = [
+        "안녕하세요. 처음 글 올립니다.",
+        "도움이 필요해서 글 남깁니다.",
+        "이 분야를 공부한 지 얼마 안 됐는데요.",
+        "여러분의 의견이 궁금합니다.",
+        "경험 있으신 분들께 조언 구합니다.",
+        "관련 자료를 찾다가 궁금한 점이 생겼어요.",
+        "같은 고민을 하시는 분들이 계실까 싶어 공유합니다.",
+        "효율적인 방법을 알고 싶습니다.",
+        "시행착오를 줄이고 싶어서 문의드립니다.",
+        "더 나은 방법이 있을까요?",
+        "실무에서는 어떻게 적용하시나요?",
+        "기초부터 차근차근 배우고 싶은데 추천 부탁드립니다.",
+        "많은 분들의 조언 기다리겠습니다.",
+        "미리 감사드립니다.",
+    ]
+
+    # 댓글 템플릿
+    COMMENT_TEMPLATES = [
+        "좋은 질문이네요!", "저도 궁금했던 부분입니다.", "도움이 되셨으면 좋겠어요.",
+        "제 경험상 이렇게 하면 될 것 같아요.", "감사합니다! 참고할게요.",
+        "좋은 정보 감사합니다.", "저도 비슷한 경험이 있어요.",
+        "한번 시도해보시는 건 어떨까요?", "공감합니다!", "응원합니다!",
+        "같이 공부하면 좋을 것 같네요.", "저도 관심 있습니다.",
+        "유익한 글이네요.", "많이 배워갑니다.", "화이팅하세요!",
+    ]
+
+    @classmethod
+    def generate_post_title(cls):
+        """게시글 제목 생성"""
+        topic = random.choice(cls.POST_TOPICS)
+        template = random.choice(cls.TITLE_TEMPLATES)
+        return template.format(topic=topic)
+
+    @classmethod
+    def generate_post_content(cls):
+        """게시글 본문 생성"""
+        num_sentences = random.randint(3, 6)
+        sentences = random.sample(cls.CONTENT_SENTENCES, min(num_sentences, len(cls.CONTENT_SENTENCES)))
+        return "\n\n".join(sentences)
+
+    @classmethod
+    def generate_comment(cls):
+        """댓글 내용 생성"""
+        return random.choice(cls.COMMENT_TEMPLATES)
+
 SEED_CONFIG = {
     'USER': {
         'ACTIVE_RATE': 0.95,       # 활성 유저 비율
@@ -77,34 +342,29 @@ SEED_CONFIG = {
         'VERIFY_SAMPLE_RATE': 0.3, # 미인증 유저 중 인증 시도 데이터 생성 비율
     },
     'COMMUNITY': {
-        'POST': {
-            'DEVIATION': 2,        # 게시글 수 표준편차
-            'DEVIATION_MULTIPLIER': 0.6,         # 기존 avg_posts_per_user * 0.6 구조였던 값
-            'MIN_POSTS_PER_USER': 0,             # 기존 max(0, ...)
-            'MAX_MULTIPLIER': 3,                 # 기존 avg_posts_per_user * 3
-            'TITLE_WORDS_RANGE': (4, 12),        # 기존 random.randint(4, 12)
-            'CONTENT_PARAGRAPHS_RANGE': (2, 6),  # 기존 random.randint(2, 6)
+        'BOARD': {
+            'MIN_POSTS_PER_BOARD': 1,     # 게시판당 최소 게시글 수
+            'MAX_POSTS_PER_BOARD': 20,    # 게시판당 최대 게시글 수
         },
-        'POST_UPDATE_RATE': 0.3,   # 게시글 수정 비율
+        'POST_UPDATE_RATE': 0.2,   # 게시글 수정 비율
         'COMMENT': {
-            'AVG_PER_POST': 8,     # 게시글 당 평균 댓글 수
-            'DEVIATION': 4,        # 표준편차
-            'MIN': 0, 'MAX': 20,
-            'UPDATE_RATE': 0.15,   # 댓글 수정 비율
-            'CONTENT_WORDS_RANGE': (5, 25) # 댓글 내용 단어 수 범위
+            'AVG_PER_POST': 2,     # 게시글 당 평균 댓글 수
+            'DEVIATION': 2,        # 표준편차
+            'MIN': 0, 'MAX': 8,
+            'UPDATE_RATE': 0.1,    # 댓글 수정 비율
         },
         'REPLY': {
-            'TARGET_RATIO': 0.4,   # 전체 댓글 중 대댓글이 달릴 비율
-            'COUNT_RANGE': (1, 3), # 대댓글 달릴 시 개수 범위
+            'TARGET_RATIO': 0.2,   # 전체 댓글 중 대댓글이 달릴 비율
+            'COUNT_RANGE': (1, 2), # 대댓글 달릴 시 개수 범위
         },
         'LIKE': {
-            'RATIO_MIN': 0.2,      # 유저 중 최소 20%가 좋아요
-            'RATIO_MAX': 0.4,      # 유저 중 최대 40%가 좋아요
+            'RATIO_MIN': 0.005,    # 유저 중 최소 0.5%가 좋아요
+            'RATIO_MAX': 0.015,    # 유저 중 최대 1.5%가 좋아요
         },
         'SCRAP': {
-            'AVG_PER_USER': 8,     # 유저당 평균 스크랩 수
-            'DEVIATION': 5,        # 표준편차
-            'MAX': 25,             # 최대 스크랩 수
+            'AVG_PER_USER': 2,     # 유저당 평균 스크랩 수
+            'DEVIATION': 2,        # 표준편차
+            'MAX': 10,             # 최대 스크랩 수
         }
     },
     'COURSE': {
@@ -426,32 +686,32 @@ class Command(BaseCommand):
 
     # 3.1 POST 생성
     def create_posts(self, users, boards, avg_posts_per_user):
-        """POST 생성 (왕성하게!)"""
-        self.stdout.write(f'게시글 생성 중 (유저당 평균 {avg_posts_per_user}개)...')
+        """POST 생성 (게시판당 1~20개)"""
+        self.stdout.write(f'게시글 생성 중 (게시판당 1~20개)...')
 
         posts = []
         active_users = [u for u in users if u.is_active]
         base_date = self.current_time - timedelta(days=POST_ACTIVITY_LOOKBACK_DAYS)
 
-        for user in active_users:
-            # 정규분포로 게시글 수 결정 (일부는 많이, 일부는 적게)
-            num_posts = max(SEED_CONFIG['COMMUNITY']['POST']['MIN_POSTS_PER_USER'], gaussian_int(
-                avg_posts_per_user,
-                SEED_CONFIG['COMMUNITY']['POST']['DEVIATION'],
-                SEED_CONFIG['COMMUNITY']['POST']['MIN_POSTS_PER_USER'],
-                avg_posts_per_user * SEED_CONFIG['COMMUNITY']['POST']['MAX_MULTIPLIER']
-            ))
+        # 게시판별로 게시글 생성
+        for board in boards:
+            num_posts = random.randint(
+                SEED_CONFIG['COMMUNITY']['BOARD']['MIN_POSTS_PER_BOARD'],
+                SEED_CONFIG['COMMUNITY']['BOARD']['MAX_POSTS_PER_BOARD']
+            )
 
             for _ in range(num_posts):
+                # 랜덤 유저 선택
+                author = random.choice(active_users)
+
                 created_at = random_datetime_between(
-                    max(base_date, user.date_joined),
+                    max(base_date, author.date_joined),
                     self.current_time
                 )
 
-                # 30% 확률로 게시글 수정
+                # 20% 확률로 게시글 수정
                 updated_at = created_at
                 if random.random() < SEED_CONFIG['COMMUNITY']['POST_UPDATE_RATE']:
-                    # 방어: created_at이 current_time과 같거나 이후면 그대로 사용
                     if created_at >= self.current_time:
                         updated_at = created_at
                     else:
@@ -461,34 +721,38 @@ class Command(BaseCommand):
                         )
 
                 post = Post(
-                    author=user,
-                    board=random.choice(boards),
-                    title=fake.sentence(nb_words=random.randint(*SEED_CONFIG['COMMUNITY']['POST']['TITLE_WORDS_RANGE'])).rstrip('.'),
-                    content='\n\n'.join(fake.paragraphs(nb=random.randint(*SEED_CONFIG['COMMUNITY']['POST']['CONTENT_PARAGRAPHS_RANGE']))),
+                    author=author,
+                    board=board,
+                    title=KoreanContentGenerator.generate_post_title(),
+                    content=KoreanContentGenerator.generate_post_content(),
                     created_at=created_at,
                     updated_at=updated_at,
                 )
                 posts.append(post)
 
         Post.objects.bulk_create(posts, batch_size=BATCH_SIZE)
-        self.stdout.write(self.style.SUCCESS(f'✓ {len(posts)}개 게시글 생성'))
+        self.stdout.write(self.style.SUCCESS(f'✓ {len(posts)}개 게시글 생성 (게시판 {len(boards)}개)'))
 
         return list(Post.objects.all().order_by('-id')[:len(posts)])
 
     # 3.2 COMMENT 및 대댓글 생성
     def create_comments(self, users, posts):
-        """COMMENT 생성 (일반 댓글 + 대댓글 왕성하게!)"""
+        """COMMENT 생성 (일반 댓글 + 대댓글)"""
         self.stdout.write('댓글 및 대댓글 생성 중...')
 
         comments = []
 
         for post in posts:
-            # 게시글당 댓글 수 (0~20개, 평균 8개)
-            num_comments = gaussian_int(SEED_CONFIG['COMMUNITY']['COMMENT']['AVG_PER_POST'], SEED_CONFIG['COMMUNITY']['COMMENT']['DEVIATION'], SEED_CONFIG['COMMUNITY']['COMMENT']['MIN'], SEED_CONFIG['COMMUNITY']['COMMENT']['MAX'])
+            # 게시글당 댓글 수 (0~8개, 평균 2개)
+            num_comments = gaussian_int(
+                SEED_CONFIG['COMMUNITY']['COMMENT']['AVG_PER_POST'],
+                SEED_CONFIG['COMMUNITY']['COMMENT']['DEVIATION'],
+                SEED_CONFIG['COMMUNITY']['COMMENT']['MIN'],
+                SEED_CONFIG['COMMUNITY']['COMMENT']['MAX']
+            )
             post_comments = []
 
             for _ in range(num_comments):
-                # 방어: post.created_at이 current_time과 같거나 이후면 그대로 사용
                 if post.created_at >= self.current_time:
                     created_at = post.created_at
                 else:
@@ -498,8 +762,7 @@ class Command(BaseCommand):
                     )
 
                 updated_at = created_at
-                if random.random() < SEED_CONFIG['COMMUNITY']['COMMENT']['UPDATE_RATE']:  # 15%
-                    # 방어: created_at이 current_time과 같거나 이후면 그대로 사용
+                if random.random() < SEED_CONFIG['COMMUNITY']['COMMENT']['UPDATE_RATE']:  # 10%
                     if created_at >= self.current_time:
                         updated_at = created_at
                     else:
@@ -509,7 +772,7 @@ class Command(BaseCommand):
                     author=random.choice(users),
                     post=post,
                     parent=None,
-                    content=fake.sentence(nb_words=random.randint(*SEED_CONFIG['COMMUNITY']['COMMENT']['CONTENT_WORDS_RANGE'])),
+                    content=KoreanContentGenerator.generate_comment(),
                     created_at=created_at,
                     updated_at=updated_at,
                 )
@@ -519,7 +782,7 @@ class Command(BaseCommand):
                 Comment.objects.bulk_create(post_comments, batch_size=BATCH_SIZE)
                 comments.extend(post_comments)
 
-        # 대댓글 생성 (기존 댓글의 40% - 왕성!)
+        # 대댓글 생성 (기존 댓글의 20%)
         self.stdout.write('대댓글 생성 중...')
         all_comments = list(Comment.objects.filter(parent=None))
         replies = []
@@ -527,10 +790,9 @@ class Command(BaseCommand):
         if all_comments:
             reply_count = int(len(all_comments) * SEED_CONFIG['COMMUNITY']['REPLY']['TARGET_RATIO'])
             for comment in random.sample(all_comments, k=min(reply_count, len(all_comments))):
-                # 각 댓글에 1~3개 대댓글
+                # 각 댓글에 1~2개 대댓글
                 num_replies = random.randint(*SEED_CONFIG['COMMUNITY']['REPLY']['COUNT_RANGE'])
                 for _ in range(num_replies):
-                    # 방어: comment.created_at이 current_time과 같거나 이후면 그대로 사용
                     if comment.created_at >= self.current_time:
                         created_at = comment.created_at
                     else:
@@ -543,7 +805,7 @@ class Command(BaseCommand):
                         author=random.choice(users),
                         post=comment.post,
                         parent=comment,
-                        content=fake.sentence(nb_words=random.randint(*SEED_CONFIG['COMMUNITY']['COMMENT']['CONTENT_WORDS_RANGE'])),
+                        content=KoreanContentGenerator.generate_comment(),
                         created_at=created_at,
                         updated_at=created_at,
                     )
@@ -770,11 +1032,8 @@ class Command(BaseCommand):
                 # 평점 (정규분포)
                 rating = gaussian_int(SEED_CONFIG['COURSE']['REVIEW']['RATING']['AVG'], SEED_CONFIG['COURSE']['REVIEW']['RATING']['DEV'], SEED_CONFIG['COURSE']['REVIEW']['RATING']['MIN'], SEED_CONFIG['COURSE']['REVIEW']['RATING']['MAX'])
 
-                # 긴 리뷰 여부
-                if random.random() < SEED_CONFIG['COURSE']['REVIEW']['LONG_TEXT_RATE']:
-                    review_text = '\n\n'.join(fake.paragraphs(nb=random.randint(*SEED_CONFIG['COURSE']['REVIEW']['LONG_TEXT_PARAGRAPHS'])))
-                else:
-                    review_text = fake.sentence(nb_words=random.randint(*SEED_CONFIG['COURSE']['REVIEW']['SHORT_TEXT_WORDS']))
+                # 리뷰 텍스트 생성 (RealisticReviewGenerator 사용)
+                review_text = RealisticReviewGenerator.generate_review()
 
                 # 리뷰 작성일 (수강 시작 + 20일 이후)
                 review_start_date = enrollment.enrolled_at + timedelta(days=SEED_CONFIG['COURSE']['REVIEW']['MIN_DAYS_AFTER_ENROLL'])

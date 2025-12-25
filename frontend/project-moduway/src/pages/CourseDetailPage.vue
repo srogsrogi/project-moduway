@@ -225,7 +225,6 @@ onMounted(() => {
 
 <style scoped>
 /* 컨테이너 및 기본 레이아웃 */
-.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
 .layout-container { display: grid; grid-template-columns: 1fr 350px; gap: 40px; margin: 40px auto 80px; }
 
 /* [수정] iframe 스타일 */

@@ -8,7 +8,7 @@
 
     <div v-else-if="post" class="post-container">
 
-      <div class="post-category-tag">{{ getBoardKoreanName(post.board.name) }}</div>
+      <div class="post-category-tag" v-if="post.board">{{ getBoardKoreanName(post.board.name) }}</div>
       <h1 class="post-header-title">
         {{ post.title }}
       </h1>
@@ -21,7 +21,7 @@
         </div>
         <div class="meta-stats">
           <span>추천 {{ post.likes_count }}</span>
-          <span>댓글 {{ post.comments.length }}</span>
+          <span>댓글 {{ post.comments_count }}</span>
         </div>
       </div>
 

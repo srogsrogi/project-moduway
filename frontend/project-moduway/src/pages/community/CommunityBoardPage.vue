@@ -27,17 +27,35 @@
         
         <PostList :posts="posts" :total-count="totalCount" :loading="loading" />
         
-        <div class="pagination">
-          <a href="#">&lt;&lt;</a>
-          <a href="#">&lt;</a>
-          <a href="#" class="current">1</a>
-          <a href="#">2</a>
-          <a href="#">3</a>
-          <a href="#">4</a>
-          <a href="#">5</a>
-          <a href="#">&gt;</a>
-          <a href="#">&gt;&gt;</a>
+        <!-- Pagination -->
+        <div class="pagination" v-if="totalPages > 1">
+          <button 
+            class="page-btn" 
+            :disabled="currentPage === 1" 
+            @click="changePage(currentPage - 1)"
+          >
+            &lt;
+          </button>
+          
+          <button 
+            v-for="page in visiblePages" 
+            :key="page" 
+            class="page-btn" 
+            :class="{ current: currentPage === page }"
+            @click="changePage(page)"
+          >
+            {{ page }}
+          </button>
+          
+          <button 
+            class="page-btn" 
+            :disabled="currentPage === totalPages" 
+            @click="changePage(currentPage + 1)"
+          >
+            &gt;
+          </button>
         </div>
+
       </div>
       
     </div>
@@ -58,6 +76,10 @@ const posts = ref([]);
 const totalCount = ref(0);
 const loading = ref(false);
 
+// Pagination State
+const currentPage = ref(1);
+const itemsPerPage = 10; // 백엔드 기본 설정 (PAGE_SIZE)
+
 const searchPlaceholder = computed(() => {
   return isAllSearch.value ? '전체 게시판에서 검색해보세요.' : `'${currentBoardTitle.value}' 게시판에서 검색해보세요.`;
 });
@@ -67,16 +89,44 @@ const boardDescription = computed(() => {
   return `${currentBoardTitle.value} 게시판입니다. 자유롭게 소통해보세요.`;
 });
 
+// 전체 페이지 수 계산
+const totalPages = computed(() => {
+  return Math.ceil(totalCount.value / itemsPerPage);
+});
+
+// 화면에 보여줄 페이지 번호 계산 (최대 5개)
+const visiblePages = computed(() => {
+  const maxVisible = 5;
+  const half = Math.floor(maxVisible / 2);
+  let start = Math.max(1, currentPage.value - half);
+  let end = Math.min(totalPages.value, start + maxVisible - 1);
+
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1);
+  }
+  
+  const pages = [];
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  return pages;
+});
+
 // 게시글 목록 조회
 const fetchPosts = async (boardId = null) => {
   loading.value = true;
   try {
+    const params = {
+      page: currentPage.value // 페이지 파라미터 추가
+    };
+
     let response;
     if (boardId) {
-      response = await getPostsByBoardId(boardId);
+      response = await getPostsByBoardId(boardId, params);
     } else {
-      // BEST 인기글: 전체 게시글 조회 후 좋아요순 정렬
-      response = await searchPosts({ q: '' });
+      // BEST 인기글: 전체 게시글 조회 후 좋아요순 정렬 (검색 API 활용)
+      // 검색 API도 q='' 이면 전체 목록 반환
+      response = await searchPosts({ q: '', ...params });
     }
     
     // DRF Pagination 처리
@@ -84,6 +134,7 @@ const fetchPosts = async (boardId = null) => {
         posts.value = response.data.results;
         totalCount.value = response.data.count;
     } else {
+        // Pagination이 적용되지 않은 응답인 경우 (예방 차원)
         posts.value = response.data;
         totalCount.value = response.data.length;
     }
@@ -96,11 +147,24 @@ const fetchPosts = async (boardId = null) => {
   }
 };
 
+// 페이지 변경 핸들러
+const changePage = (page) => {
+  if (page < 1 || page > totalPages.value) return;
+  currentPage.value = page;
+  fetchPosts(currentBoardId.value);
+  window.scrollTo(0, 0); // 상단으로 이동
+};
+
 // 게시판 선택
 const handleBoardSelect = (payload) => {
   currentBoardTitle.value = payload.boardName;
   currentBoardId.value = payload.boardId === 'best_all' ? null : payload.boardId;
   isAllSearch.value = payload.isAllSearch;
+  
+  // 게시판 변경 시 페이지 초기화
+  currentPage.value = 1;
+  searchQuery.value = ''; // 검색어 초기화
+  
   fetchPosts(currentBoardId.value);
 };
 
@@ -111,14 +175,30 @@ const handleSearch = async () => {
     return;
   }
 
+  // 검색 시 페이지 초기화
+  currentPage.value = 1;
   loading.value = true;
+  
   try {
-    const params = { q: searchQuery.value };
+    const params = { 
+      q: searchQuery.value,
+      page: currentPage.value 
+    };
+    
     if (!isAllSearch.value && currentBoardId.value) {
       params.board_id = currentBoardId.value;
     }
+    
     const response = await searchPosts(params);
-    posts.value = response.data;
+    
+    // 검색 결과도 Pagination 응답 처리
+    if (response.data.results) {
+      posts.value = response.data.results;
+      totalCount.value = response.data.count;
+    } else {
+      posts.value = response.data;
+      totalCount.value = response.data.length;
+    }
   } catch (error) {
     console.error('검색 실패:', error);
     alert('검색에 실패했습니다.');
@@ -270,22 +350,28 @@ onMounted(() => {
     display: flex;
     justify-content: center;
     margin-top: 30px;
+    gap: 5px; /* 간격 추가 */
 }
-.pagination a {
+.page-btn { /* a 태그 대신 button 스타일로 변경 */
     padding: 8px 12px;
-    margin: 0 4px;
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text-main);
-    cursor: pointer; /* cursor 추가 */
+    cursor: pointer;
+    background: white;
+    min-width: 32px;
 }
-.pagination a.current {
+.page-btn.current {
     background-color: var(--primary);
     color: white;
     border-color: var(--primary);
 }
-.pagination a:hover:not(.current) { /* hover 효과 추가 */
+.page-btn:hover:not(.current):not(:disabled) {
     background-color: var(--bg-light);
+}
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* 반응형 */

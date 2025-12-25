@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.views import APIView # APIView : 기본 뷰 클래스, 좋아요 및 스크랩 토글에 사용
 
-from .models import Board, Post, Comment, Scrap
+from .models import Board, Post, Comment, Scrap, PostLike
 from .serializers import (
     BoardSerializer, PostListSerializer, PostSerializer,
     CommentSerializer, ScrapSerializer
@@ -114,8 +114,8 @@ class PostListView(generics.ListCreateAPIView):
 
         # 기본 queryset 구성
         queryset = Post.objects.select_related('author', 'board').annotate(
-            likes_count=Count('likes', distinct=True),
-            comments_count=Count('comments', filter=Q(comments__parent=None), distinct=True)
+            likes_count=Count('post_likes', distinct=True),
+            comments_count=Count('comments', distinct=True)
         )
 
         # 게시판 필터링
@@ -220,7 +220,8 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
                 ).order_by('created_at')
             )
         ).annotate(
-            likes_count=Count('likes', distinct=True),
+            likes_count=Count('post_likes', distinct=True),
+            comments_count=Count('comments', distinct=True),
             is_liked=user_liked_subquery,
             is_scrapped=user_scrapped_subquery
         )
@@ -260,8 +261,8 @@ class PostSearchView(generics.ListAPIView):
 
         # 2. 기본 queryset 준비
         queryset = Post.objects.select_related('author', 'board').annotate(
-            likes_count=Count('likes'),
-            comments_count=Count('comments', filter=Q(comments__parent=None))
+            likes_count=Count('post_likes', distinct=True),
+            comments_count=Count('comments', distinct=True)
         )
 
         # 3. 게시판 필터링 (유효성 검증 추가)

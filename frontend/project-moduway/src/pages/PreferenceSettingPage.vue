@@ -244,7 +244,7 @@ const savePreferences = () => {
   justify-content: center;
 }
 
-.container { max-width: 800px; margin: 0 auto; padding: 20px; border: 1px solid var(--border); border-radius: 8px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.container { max-width: 1000px; margin: 0 auto; padding: 20px; border: 1px solid var(--border); border-radius: 8px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 
 /* Common Components */
 .section-title { font-size: 28px; font-weight: 700; margin-bottom: 30px; color: var(--primary-dark); }

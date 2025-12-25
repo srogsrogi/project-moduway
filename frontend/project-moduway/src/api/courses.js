@@ -20,6 +20,11 @@ export const getRecommendedCourses = (courseId) => {
   return api.get(`/courses/${courseId}/recommendations/`);
 };
 
+// 강좌 리뷰 요약 조회 (AI)
+export const getReviewSummary = (courseId) => {
+  return api.get(`/comparisons/courses/${courseId}/review-summary/`);
+};
+
 // 의미 기반 강좌 검색 (필터 파라미터 지원)
 export const searchSemanticCourses = (params = {}) => {
   return api.get(`/courses/search/semantic/`, { params });

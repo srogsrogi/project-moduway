@@ -14,7 +14,7 @@ a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
 
 /* 공통 컴포넌트 */
-.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
 .btn { padding: 10px 24px; border-radius: 4px; font-weight: 600; cursor: pointer; transition: 0.3s; border: none; }
 .btn-primary { background-color: var(--primary); color: white; }
 .btn-primary:hover { background-color: var(--primary-dark); }

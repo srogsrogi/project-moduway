@@ -158,6 +158,12 @@ class PostSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(read_only=True)
 
     # [설계의도]
+    # - View에서 annotate로 계산된 댓글 수 사용
+    # [상세고려사항]
+    # - N+1 방지를 위해 source 제거
+    comments_count = serializers.IntegerField(read_only=True)
+
+    # [설계의도]
     # - View에서 Subquery 또는 prefetch로 미리 계산된 값 사용
     # [상세고려사항]
     # - 기존: 각 Post마다 exists() 쿼리 실행 (N+1)
@@ -176,7 +182,7 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = (
             'id', 'author', 'board', 'board_id', 'title', 'content',
-            'created_at', 'updated_at', 'likes_count', 'is_liked',
+            'created_at', 'updated_at', 'likes_count', 'comments_count', 'is_liked',
             'is_scrapped', 'comments'
         )
         read_only_fields = ('id', 'author', 'created_at', 'updated_at')

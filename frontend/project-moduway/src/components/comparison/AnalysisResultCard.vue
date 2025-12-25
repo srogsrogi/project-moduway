@@ -38,9 +38,9 @@
       </ul>
     </div>
 
-    <!-- 상세 보기 토글 버튼 -->
-    <button class="btn-toggle-details" @click="isOpen = !isOpen">
-      {{ isOpen ? '접기 ▲' : '더 보기 ▼' }}
+    <!-- 상세 보기 토글 버튼 (접혀있을 때만 표시) -->
+    <button v-if="!isOpen" class="btn-toggle-details" @click="isOpen = true">
+      더 보기 ▼
     </button>
 
     <!-- 상세 내용 (토글됨) -->
@@ -157,6 +157,11 @@
       <div class="card-footer">
         <button class="btn-detail" @click="goToCourseDetail">강좌 상세 정보 및 수강신청</button>
       </div>
+
+      <!-- 접기 버튼 (펼쳐졌을 때 최하단에 표시) -->
+      <button class="btn-toggle-details btn-collapse" @click="isOpen = false">
+        접기 ▲
+      </button>
     </div>
   </div>
 </template>
@@ -235,6 +240,7 @@ const goToCourseDetail = () => {
 /* Key Points Section */
 .key-points-section {
   padding: 0 32px 20px 32px;
+  min-height: 140px; /* 핵심 포인트 개수가 달라도 기본 카드 높이 통일 */
 }
 
 .points-title {
@@ -281,6 +287,7 @@ const goToCourseDetail = () => {
   font-weight: 600;
   cursor: pointer;
   transition: 0.2s;
+  margin-top: auto;
 }
 
 .btn-toggle-details:hover {
@@ -288,9 +295,17 @@ const goToCourseDetail = () => {
   color: var(--primary);
 }
 
+/* 접기 버튼 (details-content 안에 있을 때) */
+.btn-toggle-details.btn-collapse {
+  margin-top: 0;
+  border-top: 1px solid #f3f4f6;
+  border-bottom: none;
+}
+
 .details-content {
   /* 펼침 애니메이션은 JS나 transition 컴포넌트로 처리하는게 좋지만, 여기선 단순 v-show */
   padding-top: 24px;
+  padding-bottom: 0;
 }
 
 /* 기존 스타일 */

@@ -12,7 +12,7 @@ class CourseAIReview(models.Model):
     - Rating 점수: 1 ~ 5 정수 (IntegerField)
     - Average 점수: 1.0 ~ 5.0 실수 (FloatField, 둘째 자리 반올림)
     - 1: 매우 낮음/쉬움/짧음
-    - 5: 매우 높음/어려움/김
+    - 5: 매우 높음/어려움/긺
     """
 
     course = models.OneToOneField(
