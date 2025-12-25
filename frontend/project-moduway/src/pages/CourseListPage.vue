@@ -176,7 +176,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import CourseCard from '@/components/common/CourseCard.vue';
-import { getCourseList, searchSemanticCourses } from '@/api/courses';
+import { getCourseList, searchKeywordCourses, searchSemanticCourses } from '@/api/courses';
 
 const searchQuery = ref('');
 const selectedCategory = ref('');  // 단일 선택으로 변경
@@ -352,7 +352,7 @@ const clearSearch = () => {
   loadInitialCourses();
 };
 
-// --- 1. 키워드 검색 (Server Pagination) ---
+// --- 1. 키워드 검색 (ES + Fuzzy Search, Server Pagination) ---
 const fetchKeywordSearch = async () => {
   keywordLoading.value = true;
   try {
@@ -368,7 +368,7 @@ const fetchKeywordSearch = async () => {
       delete params.query;
     }
 
-    const { data } = await getCourseList(params);
+    const { data } = await searchKeywordCourses(params);
 
     // 강좌 상태 필터 적용 (프론트 처리)
     const filteredCourses = filterByStatus(data.results || []);
@@ -378,6 +378,7 @@ const fetchKeywordSearch = async () => {
   } catch (error) {
     console.error("키워드 검색 실패:", error);
     keywordCourses.value = [];
+    totalKeywordCount.value = 0;
   } finally {
     keywordLoading.value = false;
   }

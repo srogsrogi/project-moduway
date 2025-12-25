@@ -1,9 +1,10 @@
 from django.urls import path
 from .views import (
-    CourseDetailView, 
-    CourseReviewListView, 
+    CourseDetailView,
+    CourseReviewListView,
     CourseRecommendationView,
     CourseListView,
+    CourseKeywordSearchView,
     CourseSemanticSearchView,
 )
 
@@ -55,6 +56,9 @@ urlpatterns = [
     # 3. 추천 강의 조회: /api/v1/courses/<id>/recommendations/
     path('<int:course_id>/recommendations/', CourseRecommendationView.as_view(), name='course-recommendations'),
 
-    # 4. 의미 기반 검색: /api/v1/courses/search/semantic/?query=...
+    # 4. 키워드 검색 (ES + Fuzzy): /api/v1/courses/search/keyword/?search=...
+    path('search/keyword/', CourseKeywordSearchView.as_view(), name='course-keyword-search'),
+
+    # 5. 의미 기반 검색: /api/v1/courses/search/semantic/?query=...
     path('search/semantic/', CourseSemanticSearchView.as_view(), name='course-semantic-search'),
 ]

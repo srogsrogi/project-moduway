@@ -303,6 +303,136 @@ class CourseRecommendationView(APIView):
             return Response([], status=status.HTTP_200_OK)
 
 
+class CourseKeywordSearchView(APIView):
+    """
+    Elasticsearch를 활용한 키워드 검색 (Fuzzy Search 지원)
+
+    [설계 의도]
+    - ES의 multi_match + fuzziness로 오타 보정 기능 제공
+    - 제목(name) 필드만 검색
+    - 필터링 및 페이지네이션 지원
+    - 중복 제거 (같은 이름+교수 조합)
+    """
+    permission_classes = [AllowAny]
+
+    def _build_es_filters(self):
+        """ES query용 필터 조건 생성"""
+        filters = []
+
+        # 대분류 필터 (정확히 일치)
+        classfy_name = self.request.query_params.get('classfy_name')
+        if classfy_name:
+            filters.append({"term": {"classfy_name.keyword": classfy_name}})
+
+        # 중분류 필터 (다중 값 지원)
+        middle_classfy_names = self.request.query_params.getlist('middle_classfy_name')
+        if middle_classfy_names:
+            filters.append({"terms": {"middle_classfy_name.keyword": middle_classfy_names}})
+
+        # 운영기관 필터 (부분 일치)
+        org_name = self.request.query_params.get('org_name')
+        if org_name:
+            filters.append({"match": {"org_name": org_name}})
+
+        # 교수명 필터 (부분 일치)
+        professor = self.request.query_params.get('professor')
+        if professor:
+            filters.append({"match": {"professor": professor}})
+
+        return filters
+
+    def get(self, request):
+        search_query = request.query_params.get('search', '').strip()
+        if not search_query:
+            return Response({"results": [], "count": 0}, status=status.HTTP_200_OK)
+
+        # 페이지네이션 파라미터
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 3))
+        from_index = (page - 1) * page_size
+
+        try:
+            # ES 필터 조건 생성
+            es_filters = self._build_es_filters()
+
+            # ES 검색 쿼리 구성
+            es_query = {
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": search_query,
+                                "fields": ["name^2"],  # name 필드만, 가중치 2배
+                                "fuzziness": 1,        # 1글자 차이까지 허용
+                                "operator": "and",     # 모든 키워드 포함
+                                "prefix_length": 1     # 첫 글자는 정확히 일치해야 함
+                            }
+                        }
+                    ]
+                }
+            }
+
+            # 필터 추가
+            if es_filters:
+                es_query["bool"]["filter"] = es_filters
+
+            # ES 검색 실행 (넉넉하게 가져와서 중복 제거 후 페이지네이션)
+            res = ES_CLIENT.search(
+                index="kmooc_courses",
+                query=es_query,
+                size=200,  # 중복 제거를 위해 넉넉히 가져옴
+                source=["id"]
+            )
+
+            hits = res.get("hits", {}).get("hits", [])
+            candidate_ids = [int(h["_source"]["id"]) for h in hits]
+
+            # DB 조회
+            courses_queryset = Course.objects.filter(id__in=candidate_ids).annotate(
+                average_rating=Coalesce(Avg('reviews__rating'), 0.0),
+                review_count=Count('reviews', distinct=True)
+            )
+            course_data_map = {c.id: c for c in courses_queryset}
+
+            # 중복 제거 (ES 순서 유지)
+            final_courses = []
+            seen_identity = set()
+
+            for c_id in candidate_ids:
+                course = course_data_map.get(c_id)
+                if not course:
+                    continue
+
+                curr_name = course.name.strip()
+                curr_professor = course.professor.strip()
+                identity = (curr_name, curr_professor)
+
+                if identity not in seen_identity:
+                    final_courses.append(course)
+                    seen_identity.add(identity)
+
+            # 전체 개수
+            total_count = len(final_courses)
+
+            # 페이지네이션 적용
+            start = from_index
+            end = from_index + page_size
+            paginated_courses = final_courses[start:end]
+
+            serializer = CourseListSerializer(paginated_courses, many=True)
+
+            return Response({
+                "results": serializer.data,
+                "count": total_count
+            })
+
+        except Exception as e:
+            import traceback
+            print(f"❌ ES 키워드 검색 에러: {e}")
+            print(traceback.format_exc())
+            return Response({"results": [], "count": 0}, status=status.HTTP_200_OK)
+
+
 class CourseSemanticSearchView(APIView):
     """
     사용자 입력 쿼리를 임베딩하여 유사한 강좌를 검색하는 뷰

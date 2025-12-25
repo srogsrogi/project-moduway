@@ -25,6 +25,11 @@ export const getReviewSummary = (courseId) => {
   return api.get(`/comparisons/courses/${courseId}/review-summary/`);
 };
 
+// 키워드 강좌 검색 (ES + Fuzzy Search, 필터 파라미터 지원)
+export const searchKeywordCourses = (params = {}) => {
+  return api.get(`/courses/search/keyword/`, { params });
+};
+
 // 의미 기반 강좌 검색 (필터 파라미터 지원)
 export const searchSemanticCourses = (params = {}) => {
   return api.get(`/courses/search/semantic/`, { params });
