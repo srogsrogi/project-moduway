@@ -4,8 +4,22 @@
       <div class="card-thumb">
         <span class="badge" :style="{ backgroundColor: badgeColor }">{{ displayStatus }}</span>
 
-        <img v-if="course_image" :src="course_image" :alt="name" />
+        <img
+          v-if="course_image"
+          :src="course_image"
+          :alt="name"
+          loading="lazy"
+          decoding="async"
+          :fetchpriority="priority"
+          @error="handleImageError"
+          @load="handleImageLoad"
+        />
         <div v-else class="placeholder-thumb">THUMBNAIL</div>
+
+        <!-- 로딩 중 placeholder -->
+        <div v-if="course_image && imageLoading" class="image-loading">
+          <div class="spinner"></div>
+        </div>
       </div>
       <div class="card-body">
         <span class="uni-name">{{ org_name }}</span>
@@ -21,7 +35,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
   // 백엔드 SimpleCourseSerializer 필드명 사용
@@ -43,8 +57,27 @@ const props = defineProps({
   badgeColor: { type: String, default: 'var(--primary-dark)' },
 
   // 라우팅 경로 (선택적, 없으면 강좌 상세 페이지)
-  linkTo: { type: String, default: null }
+  linkTo: { type: String, default: null },
+
+  // 이미지 우선순위 (첫 3개는 'high', 나머지는 'auto')
+  priority: { type: String, default: 'auto' }
 });
+
+// 이미지 로딩 상태
+const imageLoading = ref(true);
+const imageError = ref(false);
+
+// 이미지 로드 완료 핸들러
+const handleImageLoad = () => {
+  imageLoading.value = false;
+};
+
+// 이미지 로드 에러 핸들러
+const handleImageError = (e) => {
+  imageLoading.value = false;
+  imageError.value = true;
+  console.warn(`이미지 로드 실패: ${props.course_image}`);
+};
 
 // 라우팅 경로 계산
 const computedLink = computed(() => {
@@ -81,11 +114,51 @@ const displayStatus = computed(() => props.status);
 .course-card { background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: 0.3s; position: relative; cursor: pointer; }
 .course-card:hover { box-shadow: 0 10px 20px rgba(0,0,0,0.08); transform: translateY(-5px); border-color: #ffdce0; }
 
-.card-thumb { height: 160px; background-color: #eee; position: relative; overflow: hidden; }
-.card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.card-thumb { height: 160px; background-color: #f0f0f0; position: relative; overflow: hidden; }
+.card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease;
+}
+
+/* 이미지 로딩 중 placeholder */
+.image-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+}
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .placeholder-thumb { width: 100%; height: 100%; background: #f6f6f6; display: flex; align-items: center; justify-content: center; color: #ccc; }
 
-.badge { position: absolute; top: 12px; left: 12px; background: var(--primary-dark); color: white; padding: 4px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; z-index: 1; }
+.badge { position: absolute; top: 12px; left: 12px; background: var(--primary-dark); color: white; padding: 4px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; z-index: 2; }
 
 .card-body { padding: 20px; }
 .uni-name { font-size: 13px; color: var(--text-sub); margin-bottom: 8px; display: block; }

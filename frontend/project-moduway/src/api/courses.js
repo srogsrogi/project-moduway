@@ -1,8 +1,10 @@
 import api from './index';
 
 // 강좌 목록 조회 (검색/필터/정렬/페이지네이션)
-export const getCourseList = (params = {}) => {
-  return api.get('/courses/', { params });
+export const getCourseList = (params = {}, signal = null) => {
+  const config = { params };
+  if (signal) config.signal = signal;
+  return api.get('/courses/', config);
 };
 
 // 강좌 상세 조회
@@ -26,11 +28,15 @@ export const getReviewSummary = (courseId) => {
 };
 
 // 키워드 강좌 검색 (ES + Fuzzy Search, 필터 파라미터 지원)
-export const searchKeywordCourses = (params = {}) => {
-  return api.get(`/courses/search/keyword/`, { params });
+export const searchKeywordCourses = (params = {}, signal = null) => {
+  const config = { params };
+  if (signal) config.signal = signal;
+  return api.get('/courses/search/keyword/', config);
 };
 
 // 의미 기반 강좌 검색 (필터 파라미터 지원)
-export const searchSemanticCourses = (params = {}) => {
-  return api.get(`/courses/search/semantic/`, { params });
+export const searchSemanticCourses = (params = {}, signal = null) => {
+  const config = { params };
+  if (signal) config.signal = signal;
+  return api.get('/courses/search/semantic/', config);
 };

@@ -103,9 +103,14 @@
             </div>
           </div>
 
-          <div v-if="isLoading" class="loading-state"><p>강좌 목록을 불러오는 중...</p></div>
+          <div v-if="isLoading" class="loading-state"><p>{{ loadingMessage }}</p></div>
           <div v-else-if="courses.length > 0" class="course-grid">
-            <CourseCard v-for="course in courses" :key="course.id" v-bind="course" />
+            <CourseCard
+              v-for="(course, index) in courses"
+              :key="course.id"
+              v-bind="course"
+              :priority="index < 3 ? 'high' : 'auto'"
+            />
           </div>
           <div v-else class="empty-state"><p>강좌가 없습니다.</p></div>
           
@@ -132,7 +137,12 @@
             <div v-if="keywordLoading" class="loading-state small"><p>검색 중...</p></div>
             <div v-else-if="keywordCourses.length > 0">
               <div class="course-grid">
-                <CourseCard v-for="course in keywordCourses" :key="course.id" v-bind="course" />
+                <CourseCard
+                  v-for="(course, index) in keywordCourses"
+                  :key="course.id"
+                  v-bind="course"
+                  :priority="index < 3 ? 'high' : 'auto'"
+                />
               </div>
               <!-- Server-side Pagination -->
               <div class="pagination" v-if="totalKeywordCount > 3">
@@ -154,7 +164,12 @@
             <div v-if="semanticLoading" class="loading-state small"><p>AI 분석 중...</p></div>
             <div v-else-if="semanticDisplayData.length > 0">
               <div class="course-grid">
-                <CourseCard v-for="course in semanticDisplayData" :key="course.id" v-bind="course" />
+                <CourseCard
+                  v-for="(course, index) in semanticDisplayData"
+                  :key="course.id"
+                  v-bind="course"
+                  :priority="index < 3 ? 'high' : 'auto'"
+                />
               </div>
               <!-- Client-side Pagination -->
               <div class="pagination" v-if="semanticAllData.length > 3">
@@ -174,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import CourseCard from '@/components/common/CourseCard.vue';
 import { getCourseList, searchKeywordCourses, searchSemanticCourses } from '@/api/courses';
@@ -192,6 +207,7 @@ const sortBy = ref('rating');
 // 상태 관리
 const isSearched = ref(false);
 const isLoading = ref(false);
+const loadingMessage = ref('강좌 목록을 불러오는 중...');
 
 // 전체 목록 (초기)
 const courses = ref([]);
@@ -207,6 +223,22 @@ const keywordLoading = ref(false);
 const semanticAllData = ref([]); // 전체 데이터 (Client Pagination)
 const semanticPage = ref(1);
 const semanticLoading = ref(false);
+
+// AbortController 관리 (요청 타입별로 분리)
+const abortControllers = {
+  initialLoad: null,    // 목록 모드 전용
+  search: null,         // 검색 모드 전용 (키워드+의미 묶음)
+  prefetch: null        // 백그라운드 프리페칭 전용
+};
+
+// 캐싱 시스템
+const CACHE_TTL = 5 * 60 * 1000; // 5분 (백엔드와 동일)
+
+const cache = reactive({
+  initialList: new Map(),  // key: filterHash → value: CacheEntry
+  keyword: new Map(),      // key: searchHash → value: CacheEntry
+  semantic: new Map()      // key: searchHash → value: CacheEntry
+});
 
 // 대분류-중분류 매핑 데이터
 const categoryMap = {
@@ -236,6 +268,39 @@ const sortByMapping = {
   'rating': '-average_rating'
 };
 
+// 캐시 키 생성 (필터 조합을 해시화)
+const generateCacheKey = (params) => {
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = params[key];
+        return acc;
+      }, {})
+  );
+};
+
+// 캐시 검증 (TTL 확인)
+const isValidCache = (entry) => {
+  if (!entry) return false;
+  const age = Date.now() - entry.timestamp;
+  return age < CACHE_TTL;
+};
+
+// 오래된 캐시 정리 (메모리 관리)
+const cleanupCache = () => {
+  const now = Date.now();
+
+  [cache.initialList, cache.keyword, cache.semantic].forEach(map => {
+    for (const [key, entry] of map.entries()) {
+      if (now - entry.timestamp > CACHE_TTL) {
+        map.delete(key);
+        console.log('[Cache Cleanup] 오래된 캐시 삭제');
+      }
+    }
+  });
+};
+
 // 날짜 기반 강좌 상태 계산
 const getCourseStatus = (course) => {
   const today = new Date();
@@ -262,6 +327,43 @@ const filterByStatus = (courseList) => {
     const status = getCourseStatus(course);
     return selectedStatuses.value.includes(status);
   });
+};
+
+// 동적 배치 사이즈 계산 (필터 복잡도에 따라)
+const calculateBatchSize = () => {
+  const TARGET_DISPLAY = 9; // 목표 표시 개수
+  let multiplier = 1;
+
+  // 강좌 상태 필터가 활성화되어 있으면
+  if (selectedStatuses.value.length > 0) {
+    // 선택된 상태 개수에 따라 가중치 조정
+    // 예: 4개 중 1개 선택 → 4배, 2개 선택 → 2배
+    const totalStatuses = statusOptions.length; // 4개
+    const selectedCount = selectedStatuses.value.length;
+    multiplier = Math.ceil(totalStatuses / selectedCount);
+  }
+
+  // 중분류 필터도 고려
+  if (selectedMiddleCategories.value.length > 0 &&
+      availableMiddleCategories.value.length > 0) {
+    const ratio = availableMiddleCategories.value.length /
+                  selectedMiddleCategories.value.length;
+    multiplier *= Math.min(ratio, 3); // 최대 3배까지만
+  }
+
+  // 텍스트 필터(운영기관, 교수)는 예측 불가능하므로 추가 여유
+  if (orgNameFilter.value.trim() || professorFilter.value.trim()) {
+    multiplier *= 2;
+  }
+
+  // 최종 배치 사이즈 (최소 9, 최대 100)
+  const batchSize = Math.min(
+    Math.max(Math.ceil(TARGET_DISPLAY * multiplier), 9),
+    100
+  );
+
+  console.log(`[Batch Size] 계산됨: ${batchSize} (multiplier: ${multiplier.toFixed(2)})`);
+  return batchSize;
 };
 
 // 공통 필터 파라미터 생성 헬퍼 함수
@@ -296,36 +398,262 @@ const buildFilterParams = () => {
   return params;
 };
 
-// --- 초기 로딩 ---
-const loadInitialCourses = async () => {
-  isLoading.value = true;
+// --- 초기 로딩 (재귀적 로딩 + 캐싱 + 프리페칭) ---
+const loadInitialCourses = async (options = {}) => {
+  const {
+    skipCache = false,
+    enablePrefetch = true,
+    accumulatedData = [],  // 누적 데이터
+    currentPage = initialPage.value,
+    attempt = 1,           // 시도 횟수
+    maxAttempts = 4        // 최대 4번 시도
+  } = options;
+
+  // 이전 요청 중단 (첫 시도에서만)
+  if (attempt === 1) {
+    abortControllers.initialLoad?.abort();
+    abortControllers.prefetch?.abort();
+    abortControllers.initialLoad = new AbortController();
+  }
+
+  // 동적 배치 사이즈 계산
+  const batchSize = calculateBatchSize();
+
+  const params = {
+    ...buildFilterParams(),
+    ordering: sortByMapping[sortBy.value],
+    page: currentPage,
+    page_size: batchSize
+  };
+
+  // 캐시 확인 (첫 시도에서만)
+  if (attempt === 1 && !skipCache) {
+    const cacheKey = generateCacheKey(params);
+    const cached = cache.initialList.get(cacheKey);
+    if (isValidCache(cached)) {
+      const filtered = filterByStatus(cached.data);
+
+      // 캐시된 데이터가 충분한지 확인
+      if (filtered.length >= 9 || cached.isComplete) {
+        console.log('[Cache Hit] 캐시에서 로드:', filtered.length, '개');
+        courses.value = filtered.slice(0, 9);
+        totalCount.value = cached.count;
+
+        // 백그라운드 프리페칭
+        if (enablePrefetch) {
+          requestIdleCallback(() => prefetchNextPages(), { timeout: 2000 });
+        }
+        return;
+      }
+      // 캐시가 있지만 부족하면 → 추가 로드 필요
+      console.log('[Cache Hit] 데이터 부족, 추가 로드');
+    }
+  }
+
+  // 로딩 상태 설정
+  if (attempt === 1) {
+    isLoading.value = true;
+    loadingMessage.value = '강좌 목록을 불러오는 중...';
+  } else {
+    loadingMessage.value = `더 많은 강좌를 찾는 중... (${attempt}/${maxAttempts})`;
+  }
+
+  let hasEnoughData = false; // finally에서도 접근 가능하도록 선언
+
   try {
+    const { data } = await getCourseList(
+      params,
+      abortControllers.initialLoad.signal
+    );
+
+    // 새로 받은 데이터를 누적 데이터에 추가
+    const allData = [...accumulatedData, ...(data.results || [])];
+
+    // 필터링 적용
+    const filtered = filterByStatus(allData);
+
+    console.log(`[Attempt ${attempt}] 로드: ${data.results.length}개, 필터링 후: ${filtered.length}개, 누적: ${allData.length}개`);
+
+    // 목표 개수 달성 여부 확인
+    const TARGET = 9;
+    hasEnoughData = filtered.length >= TARGET;
+    const hasMorePages = currentPage < Math.ceil(data.count / batchSize);
+    const canRetry = attempt < maxAttempts;
+
+    if (!hasEnoughData && hasMorePages && canRetry) {
+      // 데이터 부족 → 다음 페이지 추가 로드 (재귀)
+      console.log(`[Recursive Load] 데이터 부족 (${filtered.length}/${TARGET}), 다음 페이지 로드`);
+
+      return loadInitialCourses({
+        skipCache: true,
+        enablePrefetch: false, // 재귀 중에는 프리페칭 안 함
+        accumulatedData: allData,
+        currentPage: currentPage + 1,
+        attempt: attempt + 1,
+        maxAttempts
+      });
+    }
+
+    // 성공: 데이터 충분하거나 더 이상 로드할 페이지 없음
+    courses.value = filtered.slice(0, TARGET);
+    totalCount.value = data.count || 0;
+
+    // 캐시 저장 (모든 누적 데이터)
+    const cacheKey = generateCacheKey({
+      ...params,
+      page: initialPage.value // 원래 페이지로 저장
+    });
+    cache.initialList.set(cacheKey, {
+      data: allData,
+      count: data.count,
+      timestamp: Date.now(),
+      page: currentPage,
+      batchSize,
+      isComplete: !hasMorePages || hasEnoughData // 완전한지 표시
+    });
+
+    console.log('[Cache Save] 캐시 저장:', allData.length, '개');
+
+    // 프리페칭 시작 (첫 시도에서만)
+    // 이미지 로딩을 방해하지 않도록 충분한 딜레이 후 시작
+    if (attempt === 1 && enablePrefetch) {
+      requestIdleCallback(() => {
+        // 추가로 2초 대기 (이미지 로딩 완료 대기)
+        setTimeout(() => prefetchNextPages(), 2000);
+      }, { timeout: 3000 });
+    }
+
+  } catch (error) {
+    if (error.name === 'CanceledError' || error.name === 'AbortError') {
+      console.log('[Aborted] 요청 취소');
+      return;
+    }
+    console.error("초기 로딩 실패:", error);
+
+    // 에러 발생 시 누적된 데이터라도 표시
+    if (accumulatedData.length > 0) {
+      const filtered = filterByStatus(accumulatedData);
+      courses.value = filtered.slice(0, 9);
+    }
+  } finally {
+    if (attempt === 1 || !hasEnoughData) {
+      isLoading.value = false;
+    }
+  }
+};
+
+// 프리페칭 (다음 페이지들을 백그라운드에서 로드)
+const prefetchNextPages = async () => {
+  const batchSize = calculateBatchSize();
+  const currentPage = initialPage.value;
+  const maxPage = Math.ceil(totalCount.value / batchSize);
+
+  // 다음 2개 "배치"를 프리페칭
+  const pagesToPrefetch = [currentPage + 1, currentPage + 2]
+    .filter(p => p <= maxPage);
+
+  if (pagesToPrefetch.length === 0) return;
+
+  abortControllers.prefetch = new AbortController();
+
+  for (const page of pagesToPrefetch) {
     const params = {
       ...buildFilterParams(),
       ordering: sortByMapping[sortBy.value],
-      page: initialPage.value,
-      page_size: 9
+      page,
+      page_size: batchSize
     };
 
-    const { data } = await getCourseList(params);
+    const cacheKey = generateCacheKey(params);
+    if (cache.initialList.has(cacheKey)) {
+      console.log(`[Prefetch Skip] 페이지 ${page} 이미 캐시됨`);
+      continue;
+    }
 
-    // 강좌 상태 필터 적용 (프론트 처리)
-    const filteredCourses = filterByStatus(data.results || []);
+    try {
+      console.log(`[Prefetch] 페이지 ${page} (배치: ${batchSize})`);
+      const { data } = await getCourseList(
+        params,
+        abortControllers.prefetch.signal
+      );
 
-    courses.value = filteredCourses;
-    totalCount.value = data.count || 0;
-  } catch (error) {
-    console.error("초기 로딩 실패:", error);
-  } finally {
-    isLoading.value = false;
+      cache.initialList.set(cacheKey, {
+        data: data.results,
+        count: data.count,
+        timestamp: Date.now(),
+        page,
+        batchSize,
+        isComplete: true
+      });
+
+      console.log(`[Prefetch Success] 페이지 ${page}: ${data.results.length}개`);
+
+      // 너무 빨리 요청하지 않도록 딜레이 추가 (네트워크 부하 분산)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+    } catch (error) {
+      if (error.name === 'CanceledError' || error.name === 'AbortError') {
+        console.log(`[Prefetch Aborted] 페이지 ${page}`);
+        break;
+      }
+      console.error(`[Prefetch Error] 페이지 ${page}:`, error);
+    }
   }
 };
 
 const changeInitialPage = (newPage) => {
   if (newPage < 1) return;
+
+  // 페이지 번호 업데이트
   initialPage.value = newPage;
-  loadInitialCourses();
+
+  // 캐시부터 확인
+  const batchSize = calculateBatchSize();
+  const params = {
+    ...buildFilterParams(),
+    ordering: sortByMapping[sortBy.value],
+    page: newPage,
+    page_size: batchSize
+  };
+
+  const cacheKey = generateCacheKey(params);
+  const cached = cache.initialList.get(cacheKey);
+
+  if (isValidCache(cached)) {
+    const filtered = filterByStatus(cached.data);
+
+    if (filtered.length >= 9) {
+      // 캐시에서 즉시 표시
+      console.log('[Page Change] 캐시 사용');
+      courses.value = filtered.slice(0, 9);
+      totalCount.value = cached.count;
+
+      // 백그라운드 프리페칭 (다음 페이지들)
+      // 이미지 로딩 우선순위를 위해 딜레이
+      requestIdleCallback(() => {
+        setTimeout(() => prefetchNextPages(), 1500);
+      }, { timeout: 2000 });
+      return;
+    }
+  }
+
+  // 캐시 없거나 부족 → 새로 로드
+  loadInitialCourses({ skipCache: false });
 };
+
+// requestIdleCallback polyfill (Safari 등에서 미지원)
+const requestIdleCallback = window.requestIdleCallback || ((cb, opts) => {
+  const start = Date.now();
+  return setTimeout(() => {
+    cb({
+      didTimeout: false,
+      timeRemaining: () => Math.max(0, 50 - (Date.now() - start))
+    });
+  }, 1);
+});
+
+// 캐시 정리 타이머 ID
+let cacheCleanupInterval = null;
 
 onMounted(() => {
   // URL 쿼리 파라미터 확인 (메인페이지 등에서 넘어온 경우)
@@ -336,56 +664,119 @@ onMounted(() => {
     // 파라미터가 없으면 직접 로드
     loadInitialCourses();
   }
+
+  // 주기적으로 캐시 정리 (5분마다)
+  cacheCleanupInterval = setInterval(cleanupCache, CACHE_TTL);
 });
 
-// --- 검색 트리거 ---
+// 컴포넌트 언마운트 시 정리
+onUnmounted(() => {
+  // 모든 진행 중인 요청 중단
+  abortControllers.initialLoad?.abort();
+  abortControllers.search?.abort();
+  abortControllers.prefetch?.abort();
+
+  // 캐시 정리 타이머 해제
+  if (cacheCleanupInterval) {
+    clearInterval(cacheCleanupInterval);
+  }
+
+  console.log('[Cleanup] 컴포넌트 언마운트 - 모든 요청 중단 및 타이머 해제');
+});
+
+// --- 검색 트리거 (키워드 + 의미 검색 동시 실행) ---
 const triggerSearch = () => {
   const query = searchQuery.value.trim();
   if (!query) {
     alert("검색어를 입력해주세요.");
     return;
   }
-  isSearched.value = true;
 
-  // 상태 초기화
+  // 이전 요청 모두 중단
+  abortControllers.initialLoad?.abort();
+  abortControllers.prefetch?.abort();
+  abortControllers.search?.abort();
+
+  // 검색 모드 전환
+  isSearched.value = true;
   keywordPage.value = 1;
   semanticPage.value = 1;
 
-  // 두 검색 동시에 실행
-  fetchKeywordSearch();
-  fetchSemanticSearch();
+  // 새 검색 컨트롤러 생성 (키워드+의미 공유)
+  abortControllers.search = new AbortController();
+
+  // 두 검색 동시 실행 (같은 signal 사용)
+  fetchKeywordSearch(abortControllers.search.signal);
+  fetchSemanticSearch(abortControllers.search.signal);
 };
 
 const clearSearch = () => {
+  // 검색 요청 중단
+  abortControllers.search?.abort();
+
   isSearched.value = false;
   searchQuery.value = '';
-  loadInitialCourses();
+
+  // 목록 모드로 복귀
+  loadInitialCourses({ skipCache: false });
 };
 
-// --- 1. 키워드 검색 (ES + Fuzzy Search, Server Pagination) ---
-const fetchKeywordSearch = async () => {
+// --- 1. 키워드 검색 (ES + Fuzzy Search, Server Pagination + 캐싱) ---
+const fetchKeywordSearch = async (signal = null) => {
+  // signal이 없으면 새로 생성 (페이지 변경 시)
+  if (!signal) {
+    abortControllers.search?.abort();
+    abortControllers.search = new AbortController();
+    signal = abortControllers.search.signal;
+  }
+
+  const params = {
+    ...buildFilterParams(),
+    page: keywordPage.value,
+    page_size: 3
+  };
+
+  // 검색어는 search 파라미터로 전송
+  if (params.query) {
+    params.search = params.query;
+    delete params.query;
+  }
+
+  // 캐시 확인
+  const cacheKey = generateCacheKey(params);
+  const cached = cache.keyword.get(cacheKey);
+  if (isValidCache(cached)) {
+    console.log('[Cache Hit] 키워드 검색 캐시');
+    keywordCourses.value = filterByStatus(cached.data);
+    totalKeywordCount.value = cached.count;
+    return;
+  }
+
   keywordLoading.value = true;
   try {
-    const params = {
-      ...buildFilterParams(),
-      page: keywordPage.value,
-      page_size: 3
-    };
-
-    // 검색어는 search 파라미터로 전송
-    if (params.query) {
-      params.search = params.query;
-      delete params.query;
-    }
-
-    const { data } = await searchKeywordCourses(params);
+    const { data } = await searchKeywordCourses(params, signal);
 
     // 강좌 상태 필터 적용 (프론트 처리)
     const filteredCourses = filterByStatus(data.results || []);
 
     keywordCourses.value = filteredCourses;
     totalKeywordCount.value = data.count || 0;
+
+    // 캐시 저장
+    cache.keyword.set(cacheKey, {
+      data: data.results,
+      count: data.count,
+      timestamp: Date.now(),
+      page: keywordPage.value
+    });
+
+    console.log('[Cache Save] 키워드 검색 캐시 저장');
+
   } catch (error) {
+    if (error.name === 'CanceledError' || error.name === 'AbortError') {
+      console.log('[Aborted] 키워드 검색 취소됨');
+      return;
+    }
     console.error("키워드 검색 실패:", error);
     keywordCourses.value = [];
     totalKeywordCount.value = 0;
@@ -400,18 +791,48 @@ const changeKeywordPage = (newPage) => {
   fetchKeywordSearch();
 };
 
-// --- 2. 시맨틱 검색 (Client Pagination) ---
-const fetchSemanticSearch = async () => {
+// --- 2. 의미 기반 검색 (Client Pagination + 캐싱) ---
+const fetchSemanticSearch = async (signal = null) => {
+  // signal이 없으면 새로 생성 (일반적으로는 triggerSearch에서 전달됨)
+  if (!signal) {
+    abortControllers.search?.abort();
+    abortControllers.search = new AbortController();
+    signal = abortControllers.search.signal;
+  }
+
+  // 필터 파라미터 포함해서 전송
+  const params = buildFilterParams();
+
+  // 캐시 확인
+  const cacheKey = generateCacheKey(params);
+  const cached = cache.semantic.get(cacheKey);
+  if (isValidCache(cached)) {
+    console.log('[Cache Hit] 의미 검색 캐시');
+    semanticAllData.value = filterByStatus(cached.data);
+    return;
+  }
+
   semanticLoading.value = true;
   try {
-    // 필터 파라미터 포함해서 전송
-    const params = buildFilterParams();
-    const { data } = await searchSemanticCourses(params);
+    const { data } = await searchSemanticCourses(params, signal);
 
     // 강좌 상태 필터 적용 (프론트 처리)
     const filteredCourses = filterByStatus(data || []);
     semanticAllData.value = filteredCourses;
+
+    // 캐시 저장
+    cache.semantic.set(cacheKey, {
+      data: data,
+      timestamp: Date.now()
+    });
+
+    console.log('[Cache Save] 의미 검색 캐시 저장');
+
   } catch (error) {
+    if (error.name === 'CanceledError' || error.name === 'AbortError') {
+      console.log('[Aborted] 의미 검색 취소됨');
+      return;
+    }
     console.error("AI 검색 실패:", error);
     semanticAllData.value = [];
   } finally {
