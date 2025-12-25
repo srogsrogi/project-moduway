@@ -104,7 +104,7 @@
             >
             <div class="slider-labels">
               <span>짧음(1-4주)</span>
-              <span>김(17주+)</span>
+              <span>긺(17주+)</span>
             </div>
           </div>
         </div>
